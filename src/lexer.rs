@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-const SPECIAL_CHARS: [char; 7] = ['(', ')', '[', ']', '{', '}', ','];
+const SPECIAL_CHARS: [char; 8] = ['(', ')', '[', ']', '{', '}', ',', '='];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -20,6 +20,13 @@ pub enum Token {
     // keywords
     Proc,
     If,
+    Elif,
+    Else,
+    While,
+    Loop,
+    Let,
+    Var,
+    Const,
 
     // special characters
     LParen,
@@ -29,6 +36,7 @@ pub enum Token {
     LBrace,
     RBrace,
     Comma,
+    Equals,
 
     // newline
     Newline,
@@ -152,7 +160,7 @@ impl<'l> Lexer<'l> {
         match self.peek() {
             '(' | '[' | '{' => self.nesting += 1,
             ')' | ']' | '}' => self.nesting -= 1,
-            ',' => (),
+            ',' | '=' => (),
             _ => unreachable!(),
         };
         match self.next() {
@@ -163,6 +171,7 @@ impl<'l> Lexer<'l> {
             '{' => Token::LBrace,
             '}' => Token::RBrace,
             ',' => Token::Comma,
+            '=' => Token::Equals,
             _ => unreachable!(),
         }
     }
@@ -253,6 +262,13 @@ fn str_to_keyword(s: &str) -> Option<Token> {
     Some(match s {
         "proc" => Token::Proc, 
         "if" => Token::If, 
+        "else" => Token::Else,
+        "elif" => Token::Elif,
+        "while" => Token::While,
+        "loop" => Token::Loop,
+        "let" => Token::Let,
+        "var" => Token::Var,
+        "const" => Token::Const,
         _ => return None,
     })
 }
@@ -273,6 +289,13 @@ fn token_len(t: &Token) -> usize {
 
         Token::Proc => 4,
         Token::If => 2,
+        Token::Else => 4,
+        Token::Elif => 4,
+        Token::While => 5,
+        Token::Loop => 4,
+        Token::Let => 3,
+        Token::Var => 3,
+        Token::Const => 5,
 
         Token::LParen 
             | Token::RParen 
@@ -280,7 +303,8 @@ fn token_len(t: &Token) -> usize {
             | Token::RBracket 
             | Token::LBrace 
             | Token::RBrace 
-            | Token::Comma => 1,
+            | Token::Comma 
+            | Token::Equals => 1,
 
         // newline
         Token::Newline => 1,

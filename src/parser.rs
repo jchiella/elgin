@@ -11,6 +11,9 @@ pub enum Error {
     EOF {
         lineno: usize,
         charno: usize,
+    },
+    ExpectedIdent {
+        found: Span,
     }
 }
 
@@ -19,6 +22,8 @@ pub enum Type {
     Int,
     Float,
     Str,
+    Undefined,
+    Bool,
 }
 
 #[derive(Debug, Clone)]
@@ -80,8 +85,44 @@ pub enum Node {
         start: usize,
         end: usize,
     },
+    WhileStatement {
+        condition: Box<Node>,
+        body: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
     Block {
         nodes: Vec<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
+    LetStatement {
+        name: String,
+        value: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
+    VarStatement {
+        name: String,
+        value: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
+    ConstStatement {
+        name: String,
+        value: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
+    ProcStatement {
+        name: String,
+        args: Vec<String>,
+        body: Box<Node>,
         lineno: usize,
         start: usize,
         end: usize,
@@ -125,6 +166,15 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn ensure_ident(&mut self) -> Result<String, Error> {
+        if let Token::Ident(id) = self.peek().token.clone() {
+            self.next();
+            Ok(id)
+        } else {
+            Err(Error::ExpectedIdent {found: self.peek().clone()})
+        }
+    }
+    
     pub fn go(&mut self) -> Result<Vec<Node>, Error> {
         let mut nodes = vec![];
         loop {
@@ -139,21 +189,78 @@ impl<'p> Parser<'p> {
 
     fn statement(&mut self) -> Result<Node, Error> {
         Ok(match self.peek().token {
-            Token::If => self.if_statement()?,
+            Token::If => self.if_statement(true)?,
+            Token::While => self.while_statement()?,
+            Token::Loop => self.loop_statement()?,
+            Token::Let => self.let_statement()?,
+            Token::Var => self.var_statement()?,
+            Token::Const => self.const_statement()?,
+            Token::Proc => self.proc_statement()?,
             _ => self.expr(0)?,
         })
     }
 
     // add else support
-    fn if_statement(&mut self) -> Result<Node, Error> {
-        self.ensure_next(Token::If)?; 
+    fn if_statement(&mut self, ensure_if: bool) -> Result<Node, Error> {
+        if ensure_if {
+            self.ensure_next(Token::If)?; 
+        }
         let condition = self.expr(0)?;
         let body = self.block()?;
+        let else_body;
+        if self.peek().token == Token::Elif {
+            self.ensure_next(Token::Elif)?;
+            else_body = self.if_statement(false)?;
+        } else if self.peek().token == Token::Else {
+            self.ensure_next(Token::Else)?;
+            else_body = self.block()?;
+        } else {
+            else_body = Node::Block {
+                nodes: vec![Node::Literal {
+                    typ: Type::Undefined,
+                    value: "undefined".to_owned(),
+                    lineno: 0,
+                    start: 0,
+                    end: 0,
+                }],
+                lineno: 0,
+                start: 0,
+                end: 0,
+            };
+        }
 
         Ok(Node::IfStatement {
             condition: Box::new(condition),
             body: Box::new(body.clone()),
-            else_body: Box::new(body),
+            else_body: Box::new(else_body),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn while_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::While)?; 
+        let condition = self.expr(0)?;
+        let body = self.block()?;
+
+        Ok(Node::WhileStatement {
+            condition: Box::new(condition),
+            body: Box::new(body.clone()),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn loop_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Loop)?; 
+        let condition = Node::Literal {
+            typ: Type::Bool,
+            value: "true".to_owned(),
+            lineno: 0, start: 0, end: 0,
+        };
+        let body = self.block()?;
+
+        Ok(Node::WhileStatement {
+            condition: Box::new(condition),
+            body: Box::new(body.clone()),
             lineno: 0, start: 0, end: 0,
         })
     }
@@ -172,6 +279,87 @@ impl<'p> Parser<'p> {
             }
         }
         Ok(Node::Block {nodes, lineno: 0, start: 0, end: 0})
+    }
+
+    fn let_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Let)?;
+        let name = self.ensure_ident()?;
+        let value;
+        if self.peek().token == Token::Equals {
+            self.ensure_next(Token::Equals)?;
+            value = self.expr(0)?;
+        } else {
+            value = Node::Literal {
+                typ: Type::Undefined,
+                value: "undefined".to_owned(),
+                lineno: 0, start: 0, end: 0,
+            };
+        }
+
+        Ok(Node::LetStatement {
+            name,
+            value: Box::new(value),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn var_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Var)?;
+        let name = self.ensure_ident()?;
+        let value;
+        if self.peek().token == Token::Equals {
+            self.ensure_next(Token::Equals)?;
+            value = self.expr(0)?;
+        } else {
+            value = Node::Literal {
+                typ: Type::Undefined,
+                value: "undefined".to_owned(),
+                lineno: 0, start: 0, end: 0,
+            };
+        }
+
+        Ok(Node::VarStatement {
+            name,
+            value: Box::new(value),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn const_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Const)?;
+        let name = self.ensure_ident()?;
+        self.ensure_next(Token::Equals)?;
+        let value = self.expr(0)?;
+
+        Ok(Node::ConstStatement {
+            name,
+            value: Box::new(value),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn proc_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Proc)?;
+        let name = self.ensure_ident()?;
+        self.ensure_next(Token::LParen)?;
+        let mut args = Vec::new();
+        while self.peek().token != Token::RParen {
+            args.push(self.ensure_ident()?);
+            if self.peek().token != Token::Comma {
+                break;
+            } else {
+                self.ensure_next(Token::Comma)?;
+            }
+        }
+        self.ensure_next(Token::RParen)?;
+        let body = self.block()?;
+
+        Ok(Node::ProcStatement {
+            name,
+            args,
+            body: Box::new(body),
+            lineno: 0, start: 0, end: 0,
+        })
     }
 
     fn expr(&mut self, min_bp: u8) -> Result<Node, Error> {
