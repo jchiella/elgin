@@ -14,14 +14,14 @@ pub enum Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Float,
     Str,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Literal {
         typ: Type,
@@ -71,6 +71,20 @@ pub enum Node {
         lineno: usize,
         start: usize,
         end: usize,
+    },
+    IfStatement {
+        condition: Box<Node>,
+        body: Box<Node>,
+        else_body: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
+    Block {
+        nodes: Vec<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
     }
 }
 
@@ -114,13 +128,50 @@ impl<'p> Parser<'p> {
     pub fn go(&mut self) -> Result<Vec<Node>, Error> {
         let mut nodes = vec![];
         loop {
-            nodes.push(self.expr(0)?);
+            nodes.push(self.statement()?);
             self.ensure_next(Token::Newline)?;
             if self.peek().token == Token::EOF {
                 break;
             }
         }
         Ok(nodes)
+    }
+
+    fn statement(&mut self) -> Result<Node, Error> {
+        Ok(match self.peek().token {
+            Token::If => self.if_statement()?,
+            _ => self.expr(0)?,
+        })
+    }
+
+    // add else support
+    fn if_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::If)?; 
+        let condition = self.expr(0)?;
+        let body = self.block()?;
+
+        Ok(Node::IfStatement {
+            condition: Box::new(condition),
+            body: Box::new(body.clone()),
+            else_body: Box::new(body),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn block(&mut self) -> Result<Node, Error> {
+        let mut nodes = vec![];
+        self.ensure_next(Token::LBrace)?;
+        loop {
+            nodes.push(self.statement()?);
+            if self.ensure_next(Token::Newline).is_err() {
+                self.ensure_next(Token::RBrace)?;
+                break;
+            }
+            if self.peek().token == Token::RBrace {
+                break;
+            }
+        }
+        Ok(Node::Block {nodes, lineno: 0, start: 0, end: 0})
     }
 
     fn expr(&mut self, min_bp: u8) -> Result<Node, Error> {
@@ -177,7 +228,13 @@ impl<'p> Parser<'p> {
 
         loop {
             let op = match self.peek().token.clone() {
-                Token::EOF | Token::Newline | Token::RParen | Token::RBracket | Token::Comma => break,
+                Token::EOF 
+                    | Token::Newline 
+                    | Token::RParen 
+                    | Token::RBracket 
+                    | Token::Comma 
+                    | Token::LBrace 
+                    | Token::RBrace => break,
                 Token::Op(op) => op,
                 Token::LBracket => "[".to_owned(),
                 t => panic!("Bad token: {:?}", t),

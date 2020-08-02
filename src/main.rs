@@ -26,7 +26,7 @@ fn repl() {
         let lex_results = lexer.go();
         println!("______________________");
         println!("lexer output:");
-        println!("{:#?}", lex_results);
+        lex_results.iter().map(|t| println!("{}", t)).for_each(drop);
 
         let mut parser = parser::Parser::new(&lex_results);
         let parse_results = parser.go();

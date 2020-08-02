@@ -1,5 +1,7 @@
 //! The Chi lexer
 
+use std::fmt;
+
 const SPECIAL_CHARS: [char; 7] = ['(', ')', '[', ']', '{', '}', ','];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +19,7 @@ pub enum Token {
     
     // keywords
     Proc,
+    If,
 
     // special characters
     LParen,
@@ -34,12 +37,24 @@ pub enum Token {
     EOF,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Span {
     pub token: Token,
     pub lineno: usize,
     pub start: usize,
     pub end: usize,
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{} @ line {}, from {}-{}", self.token, self.lineno, self.start, self.end)
+    }
 }
 
 pub struct Lexer<'l> {
@@ -237,6 +252,7 @@ fn is_op(ch: char) -> bool {
 fn str_to_keyword(s: &str) -> Option<Token> {
     Some(match s {
         "proc" => Token::Proc, 
+        "if" => Token::If, 
         _ => return None,
     })
 }
@@ -254,7 +270,9 @@ fn token_len(t: &Token) -> usize {
 
         Token::Ident(s) => s.len(),
         Token::Op(s) => s.len(),
+
         Token::Proc => 4,
+        Token::If => 2,
 
         Token::LParen 
             | Token::RParen 
