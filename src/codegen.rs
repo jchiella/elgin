@@ -1,7 +1,6 @@
 //! Chi code generation (converts AST to ChiVM IR)
 
 use crate::parser::{Node, Type};
-use crate::ir::{Instruction, InstructionSpan};
 
 pub struct Generator<'g> {
     nodes: &'g [Node], 
@@ -14,7 +13,7 @@ impl<'g> Generator<'g> {
         }
     }
 
-    pub fn go(&mut self) -> Vec<InstructionSpan> {
+    pub fn go(&mut self) -> Vec<???> {
         let mut ins = Vec::new();
         for node in self.nodes {
             ins.append(&mut self.node(node));
@@ -22,7 +21,7 @@ impl<'g> Generator<'g> {
         ins
     }
 
-    fn node(&mut self, node: &Node) -> Vec<InstructionSpan> {
+    fn node(&mut self, node: &Node) -> Vec<???> {
         use crate::parser::Node::*;
         match node.clone() {
             Literal { typ, value, lineno, start, end, } => self.literal(typ, value, lineno, start, end),
@@ -43,15 +42,7 @@ impl<'g> Generator<'g> {
     }
 
     fn literal(&mut self, typ: Type, value: String, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {
-        vec![
-            InstructionSpan {
-                instruction: match typ {
-                    Type::Int => Instruction::Push(value),
-                    _ => unreachable!(),
-                },
-                lineno, start, end,
-            }
-        ]
+        todo!()
     }
 
     fn call(&mut self, name: String, args: Vec<Node>, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {
@@ -59,52 +50,15 @@ impl<'g> Generator<'g> {
     }
 
     fn infix_op(&mut self, op: String, left: Box<Node>, right: Box<Node>, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {
-        let mut ins = Vec::new();
-        ins.append(&mut self.node(&*left));
-        ins.append(&mut self.node(&*right));
-        ins.append(&mut vec![
-            InstructionSpan {
-                instruction: match op.as_str() {
-                    "+" => Instruction::Add,
-                    "-" => Instruction::Sub,
-                    "*" => Instruction::Mul,
-                    "/" => Instruction::Div,
-                    _ => unreachable!(),
-                },
-                lineno, start, end,
-            },
-        ]);
-        ins
+        todo!()
     }
 
     fn prefix_op(&mut self, op: String, right: Box<Node>, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {
-        let mut ins = Vec::new(); 
-        ins.append(&mut self.node(&*right));
-        ins.append(&mut vec![
-            InstructionSpan {
-                instruction: match op.as_str() {
-                    "+" => Instruction::Pos,
-                    "-" => Instruction::Neg,
-                    _ => unreachable!(),
-                },
-                lineno, start, end,
-            },
-        ]);
-        ins
+        todo!()
     }
 
     fn postfix_op(&mut self, op: String, left: Box<Node>, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {
-        let mut ins = Vec::new();
-        ins.append(&mut self.node(&*left));
-        ins.append(&mut vec![
-            InstructionSpan {
-                instruction: match op.as_str() {
-                    _ => unreachable!(),
-                },
-                lineno, start, end,
-            },
-        ]);
-        ins
+        todo!()
     }
 
     fn index_op(&mut self, object: Box<Node>, index: Box<Node>, lineno: usize, start: usize, end: usize) -> Vec<InstructionSpan> {

@@ -1,7 +1,7 @@
 mod lexer;
 mod parser;
-mod codegen;
-mod ir;
+mod errors;
+//mod codegen;
 
 use std::io::Write;
 use std::{io, env, fs};
@@ -25,7 +25,7 @@ fn repl() {
 
         let chars = &input.chars().collect::<Vec<_>>()[..];
         let mut lexer = lexer::Lexer::new(chars);
-        let lex_results = lexer.go();
+        let lex_results = lexer.go().unwrap();
         println!("______________________");
         println!("lexer output:");
         lex_results.iter().map(|t| println!("{}", t)).for_each(drop);
@@ -36,14 +36,12 @@ fn repl() {
         println!("parser output:");
         println!("{:#?}", parse_results);
 
-        let unwrapped = parse_results.unwrap();
-        let mut generator = codegen::Generator::new(&unwrapped);
-        let gen_results = generator.go();
-        println!("______________________");
-        println!("parser output:");
-        println!("{:#?}", gen_results);
-
-        input.clear();
+        //let unwrapped = parse_results.unwrap();
+        //let mut generator = codegen::Generator::new(&unwrapped);
+        //let gen_results = generator.go();
+        //println!("______________________");
+        //println!("codegen output:");
+        //println!("{:#?}", gen_results);
     }
 }
 
@@ -54,7 +52,7 @@ fn file() {
 
     let chars = &input.chars().collect::<Vec<_>>()[..];
     let mut lexer = lexer::Lexer::new(chars);
-    let lex_results = lexer.go();
+    let lex_results = lexer.go().unwrap();
     println!("______________________");
     println!("lexer output:");
     lex_results.iter().map(|t| println!("{}", t)).for_each(drop);
@@ -65,10 +63,12 @@ fn file() {
     println!("parser output:");
     println!("{:#?}", parse_results);
 
-    let unwrapped = parse_results.unwrap();
-    let mut generator = codegen::Generator::new(&unwrapped);
-    let gen_results = generator.go();
-    println!("______________________");
-    println!("parser output:");
-    println!("{:#?}", gen_results);
+    //let unwrapped = parse_results.unwrap();
+    //let mut generator = codegen::Generator::new(&unwrapped);
+    //let gen_results = generator.go();
+    //println!("______________________");
+    //println!("codegen output:");
+    //println!("{:#?}", gen_results);
+
+    input.clear();
 }

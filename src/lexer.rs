@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::errors::Error;
+
 const SPECIAL_CHARS: [char; 8] = ['(', ')', '[', ']', '{', '}', ',', '='];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,11 +94,11 @@ impl<'l> Lexer<'l> {
     }
 
     fn next(&mut self) -> char {
-        let ch = self.code[self.index];
         self.index += 1;
         if self.index >= self.code.len() {
             return '\0';
         }
+        let ch = self.code[self.index - 1];
         match ch {
             '\n' => {
                 self.lineno += 1;
@@ -145,22 +147,25 @@ impl<'l> Lexer<'l> {
         Token::Op(op)
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Result<Token, Error> {
         let mut string = String::new();
         self.next(); // skip "
         while self.peek() != '"' {
+            if self.peek() == '\0' {
+                return Err(Error::EOF {lineno: self.lineno, charno: self.charno});
+            }
             string.push(self.next());
         }
         self.next(); // skip "
-        Token::StrLiteral(string)
+        Ok(Token::StrLiteral(string))
 
     }
 
     fn special(&mut self) -> Token {
         match self.peek() {
-            '(' | '[' | '{' => self.nesting += 1,
-            ')' | ']' | '}' => self.nesting -= 1,
-            ',' | '=' => (),
+            '(' | '[' => self.nesting += 1,
+            ')' | ']' => self.nesting -= 1,
+            ',' | '=' | '{' | '}' => (),
             _ => unreachable!(),
         };
         match self.next() {
@@ -176,7 +181,7 @@ impl<'l> Lexer<'l> {
         }
     }
 
-    pub fn go(&mut self) -> Vec<Span> {
+    pub fn go(&mut self) -> Result<Vec<Span>, Error> {
         let mut tokens = vec![];
         loop {
             match self.peek() {
@@ -194,7 +199,7 @@ impl<'l> Lexer<'l> {
                     tokens.push(self.spanned(special));
                 }
                 '"' => {
-                    let string = self.string();
+                    let string = self.string()?;
                     tokens.push(self.spanned(string));
                 },
                 ch if is_op(ch) => {
@@ -220,7 +225,7 @@ impl<'l> Lexer<'l> {
                 _ => unreachable!(),
             }
         }
-        tokens
+        Ok(tokens)
     }
 
     fn spanned(&mut self, token: Token) -> Span {

@@ -1,21 +1,7 @@
 //! The Chi parser
 
 use crate::lexer::{Token, Span};
-
-#[derive(Debug)]
-pub enum Error {
-    ExpectedToken {
-        expected: Token,
-        found: Span,
-    },
-    EOF {
-        lineno: usize,
-        charno: usize,
-    },
-    ExpectedIdent {
-        found: Span,
-    }
-}
+use crate::errors::Error;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -142,19 +128,21 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn next(&mut self) -> &Span {
+    fn next(&mut self) -> Span {
         self.index += 1;
         if self.index >= self.tokens.len() {
-            return &Span {token: Token::EOF, lineno: 0, start: 0, end: 0}
+            let last = self.tokens.last().unwrap();
+            return Span {token: Token::EOF, lineno: last.lineno, start: last.start, end: last.end}
         }
-        &self.tokens[self.index - 1]
+        self.tokens[self.index - 1].clone()
     }
 
-    fn peek(&mut self) -> &Span {
+    fn peek(&mut self) -> Span {
         if self.index >= self.tokens.len() {
-            return &Span {token: Token::EOF, lineno: 0, start: 0, end: 0}
+            let last = self.tokens.last().unwrap();
+            return Span {token: Token::EOF, lineno: last.lineno, start: last.start, end: last.end}
         }
-        &self.tokens[self.index]
+        self.tokens[self.index].clone()
     }
 
     fn ensure_next(&mut self, t: Token) -> Result<(), Error> {
@@ -179,6 +167,7 @@ impl<'p> Parser<'p> {
         let mut nodes = vec![];
         loop {
             nodes.push(self.statement()?);
+            dbg!(self.peek());
             self.ensure_next(Token::Newline)?;
             if self.peek().token == Token::EOF {
                 break;
@@ -269,12 +258,14 @@ impl<'p> Parser<'p> {
         let mut nodes = vec![];
         self.ensure_next(Token::LBrace)?;
         loop {
+            let _ = self.ensure_next(Token::Newline);
             nodes.push(self.statement()?);
             if self.ensure_next(Token::Newline).is_err() {
                 self.ensure_next(Token::RBrace)?;
                 break;
             }
             if self.peek().token == Token::RBrace {
+                self.ensure_next(Token::RBrace)?;
                 break;
             }
         }
@@ -410,7 +401,7 @@ impl<'p> Parser<'p> {
                 let right = self.expr(right_bp)?;
                 Node::PrefixOp { op, right: Box::new(right), lineno, start, end }
             },
-            Span { token: Token::EOF, lineno, start, .. } => return Err(Error::EOF { lineno, charno: start }),
+            Span { token: Token::EOF, lineno, end, .. } => return Err(Error::EOF { lineno, charno: end }),
             t => panic!("Bad token: {:?}", t),
         };
 
