@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::errors::Error;
 
-const SPECIAL_CHARS: [char; 8] = ['(', ')', '[', ']', '{', '}', ',', '='];
+const SPECIAL_CHARS: [char; 9] = ['(', ')', '[', ']', '{', '}', ',', '=', ':'];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -26,7 +26,6 @@ pub enum Token {
     Else,
     While,
     Loop,
-    Let,
     Var,
     Const,
 
@@ -39,6 +38,7 @@ pub enum Token {
     RBrace,
     Comma,
     Equals,
+    Colon,
 
     // newline
     Newline,
@@ -165,7 +165,7 @@ impl<'l> Lexer<'l> {
         match self.peek() {
             '(' | '[' => self.nesting += 1,
             ')' | ']' => self.nesting -= 1,
-            ',' | '=' | '{' | '}' => (),
+            ',' | '=' | ':' | '{' | '}' => (),
             _ => unreachable!(),
         };
         match self.next() {
@@ -177,6 +177,7 @@ impl<'l> Lexer<'l> {
             '}' => Token::RBrace,
             ',' => Token::Comma,
             '=' => Token::Equals,
+            ':' => Token::Colon,
             _ => unreachable!(),
         }
     }
@@ -271,7 +272,6 @@ fn str_to_keyword(s: &str) -> Option<Token> {
         "elif" => Token::Elif,
         "while" => Token::While,
         "loop" => Token::Loop,
-        "let" => Token::Let,
         "var" => Token::Var,
         "const" => Token::Const,
         _ => return None,
@@ -298,7 +298,6 @@ fn token_len(t: &Token) -> usize {
         Token::Elif => 4,
         Token::While => 5,
         Token::Loop => 4,
-        Token::Let => 3,
         Token::Var => 3,
         Token::Const => 5,
 
@@ -309,7 +308,8 @@ fn token_len(t: &Token) -> usize {
             | Token::LBrace 
             | Token::RBrace 
             | Token::Comma 
-            | Token::Equals => 1,
+            | Token::Equals 
+            | Token::Colon => 1,
 
         // newline
         Token::Newline => 1,

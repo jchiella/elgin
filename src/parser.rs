@@ -5,11 +5,13 @@ use crate::errors::Error;
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    Int,
-    Float,
-    Str,
+    ConstInt,
+    ConstFloat,
+    ConstStr,
     Undefined,
     Bool,
+
+    I32,
 }
 
 #[derive(Debug, Clone)]
@@ -84,15 +86,9 @@ pub enum Node {
         start: usize,
         end: usize,
     },
-    LetStatement {
-        name: String,
-        value: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
-    },
     VarStatement {
         name: String,
+        typ: Type,
         value: Box<Node>,
         lineno: usize,
         start: usize,
@@ -100,6 +96,7 @@ pub enum Node {
     },
     ConstStatement {
         name: String,
+        typ: Type,
         value: Box<Node>,
         lineno: usize,
         start: usize,
@@ -108,6 +105,8 @@ pub enum Node {
     ProcStatement {
         name: String,
         args: Vec<String>,
+        arg_types: Vec<Type>,
+        ret_type: Type,
         body: Box<Node>,
         lineno: usize,
         start: usize,
@@ -163,6 +162,19 @@ impl<'p> Parser<'p> {
         }
     }
     
+    fn ensure_type(&mut self) -> Result<Type, Error> {
+        if let Token::Ident(id) = self.peek().token.clone() {
+            let typ = match id.as_str() {
+                "i32" => Type::I32,
+                _ => return Err(Error::ExpectedType {found: self.peek().clone()}),
+            };
+            self.next();
+            Ok(typ)
+        } else {
+            Err(Error::ExpectedType {found: self.peek().clone()})
+        }
+    }
+
     pub fn go(&mut self) -> Result<Vec<Node>, Error> {
         let mut nodes = vec![];
         loop {
@@ -181,7 +193,6 @@ impl<'p> Parser<'p> {
             Token::If => self.if_statement(true)?,
             Token::While => self.while_statement()?,
             Token::Loop => self.loop_statement()?,
-            Token::Let => self.let_statement()?,
             Token::Var => self.var_statement()?,
             Token::Const => self.const_statement()?,
             Token::Proc => self.proc_statement()?,
@@ -189,7 +200,6 @@ impl<'p> Parser<'p> {
         })
     }
 
-    // add else support
     fn if_statement(&mut self, ensure_if: bool) -> Result<Node, Error> {
         if ensure_if {
             self.ensure_next(Token::If)?; 
@@ -272,31 +282,11 @@ impl<'p> Parser<'p> {
         Ok(Node::Block {nodes, lineno: 0, start: 0, end: 0})
     }
 
-    fn let_statement(&mut self) -> Result<Node, Error> {
-        self.ensure_next(Token::Let)?;
-        let name = self.ensure_ident()?;
-        let value;
-        if self.peek().token == Token::Equals {
-            self.ensure_next(Token::Equals)?;
-            value = self.expr(0)?;
-        } else {
-            value = Node::Literal {
-                typ: Type::Undefined,
-                value: "undefined".to_owned(),
-                lineno: 0, start: 0, end: 0,
-            };
-        }
-
-        Ok(Node::LetStatement {
-            name,
-            value: Box::new(value),
-            lineno: 0, start: 0, end: 0,
-        })
-    }
-
     fn var_statement(&mut self) -> Result<Node, Error> {
         self.ensure_next(Token::Var)?;
         let name = self.ensure_ident()?;
+        self.ensure_next(Token::Colon)?;
+        let typ = self.ensure_type()?;
         let value;
         if self.peek().token == Token::Equals {
             self.ensure_next(Token::Equals)?;
@@ -311,6 +301,7 @@ impl<'p> Parser<'p> {
 
         Ok(Node::VarStatement {
             name,
+            typ,
             value: Box::new(value),
             lineno: 0, start: 0, end: 0,
         })
@@ -319,11 +310,14 @@ impl<'p> Parser<'p> {
     fn const_statement(&mut self) -> Result<Node, Error> {
         self.ensure_next(Token::Const)?;
         let name = self.ensure_ident()?;
+        self.ensure_next(Token::Colon)?;
+        let typ = self.ensure_type()?;
         self.ensure_next(Token::Equals)?;
         let value = self.expr(0)?;
 
         Ok(Node::ConstStatement {
             name,
+            typ,
             value: Box::new(value),
             lineno: 0, start: 0, end: 0,
         })
@@ -333,9 +327,12 @@ impl<'p> Parser<'p> {
         self.ensure_next(Token::Proc)?;
         let name = self.ensure_ident()?;
         self.ensure_next(Token::LParen)?;
-        let mut args = Vec::new();
+        let mut args = vec![];
+        let mut arg_types = vec![];
         while self.peek().token != Token::RParen {
             args.push(self.ensure_ident()?);
+            self.ensure_next(Token::Colon)?;
+            arg_types.push(self.ensure_type()?);
             if self.peek().token != Token::Comma {
                 break;
             } else {
@@ -343,11 +340,19 @@ impl<'p> Parser<'p> {
             }
         }
         self.ensure_next(Token::RParen)?;
+        let ret_type;
+        if self.ensure_next(Token::Colon).is_ok() {
+            ret_type = self.ensure_type()?; 
+        } else {
+            ret_type = Type::Undefined;
+        }
         let body = self.block()?;
 
         Ok(Node::ProcStatement {
             name,
             args,
+            arg_types,
+            ret_type,
             body: Box::new(body),
             lineno: 0, start: 0, end: 0,
         })
@@ -380,15 +385,15 @@ impl<'p> Parser<'p> {
                 }
             },
             Span{ token: Token::IntLiteral(int), lineno, start, end } => Node::Literal {
-                      typ: Type::Int,
+                      typ: Type::ConstInt,
                       value: int,
                       lineno, start, end },
             Span{ token: Token::FloatLiteral(float), lineno, start, end } => Node::Literal {
-                      typ: Type::Float,
+                      typ: Type::ConstFloat,
                       value: float,
                       lineno, start, end },
             Span{ token: Token::StrLiteral(s), lineno, start, end } => Node::Literal {
-                      typ: Type::Str,
+                      typ: Type::ConstStr,
                       value: s,
                       lineno, start, end },
             Span { token: Token::LParen, .. } => {

@@ -14,6 +14,9 @@ pub enum Error {
     },
     ExpectedIdent {
         found: Span,
+    },
+    ExpectedType {
+        found: Span,
     }
 }
 

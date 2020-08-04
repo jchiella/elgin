@@ -1,6 +1,9 @@
+mod errors;
+
 mod lexer;
 mod parser;
-mod errors;
+mod analysis;
+
 //mod codegen;
 
 use std::io::Write;
@@ -36,6 +39,13 @@ fn repl() {
         println!("parser output:");
         println!("{:#?}", parse_results);
 
+        let unwrapped = parse_results.unwrap();
+        let analyzer = analysis::Analyzer::new(&unwrapped);
+        let analysis_results = analyzer.go();
+        println!("______________________");
+        println!("analysis output:");
+        println!("{:#?}", analysis_results);
+
         //let unwrapped = parse_results.unwrap();
         //let mut generator = codegen::Generator::new(&unwrapped);
         //let gen_results = generator.go();
@@ -63,12 +73,17 @@ fn file() {
     println!("parser output:");
     println!("{:#?}", parse_results);
 
+    let unwrapped = parse_results.unwrap();
+    let analyzer = analysis::Analyzer::new(&unwrapped);
+    let analysis_results = analyzer.go();
+    println!("______________________");
+    println!("analysis output:");
+    println!("{:#?}", analysis_results);
+
     //let unwrapped = parse_results.unwrap();
     //let mut generator = codegen::Generator::new(&unwrapped);
     //let gen_results = generator.go();
     //println!("______________________");
     //println!("codegen output:");
     //println!("{:#?}", gen_results);
-
-    input.clear();
 }
