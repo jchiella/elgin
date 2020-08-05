@@ -37,10 +37,19 @@ impl<'g> Generator<'g> {
     }
 
     pub fn go(&mut self) -> Result<(), Error> {
+        self.build_header();
         for node in self.ast {
             self.node(node)?;
         }
         Ok(())
+    }
+
+    fn build_header(&mut self) {
+        unsafe {
+            let mut puts_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
+            let puts_type = LLVMFunctionType(LLVMInt32TypeInContext(self.context), puts_arg_types.as_mut_ptr(), 1, 0);
+            LLVMAddFunction(self.module, self.cstr("puts"), puts_type);
+        }
     }
 
     fn node(&mut self, node: &Node) -> GenResult {
@@ -68,7 +77,13 @@ impl<'g> Generator<'g> {
                lineno: usize, 
                start: usize, 
                end: usize) -> GenResult {
-        Ok(unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) })
+        Ok(match typ {
+            Type::ConstInt => unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) },
+            Type::I32 => unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) },
+            Type::ConstStr => unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&value), self.cstr("tmpstr")) },
+            Type::Str => unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&value), self.cstr("tmpstr")) },
+            _ => todo!(),
+        })
     }
 
     fn call(&mut self, 
@@ -147,7 +162,10 @@ impl<'g> Generator<'g> {
                     lineno: usize, 
                     start: usize, 
                     end: usize) -> GenResult {
-        todo!()
+        Ok(unsafe { 
+            let var = LLVMGetNamedGlobal(self.module, self.cstr(&name));
+            LLVMBuildLoad(self.builder, var, self.cstr("tmpload"))
+        })
     }
 
     fn if_statement(&mut self, 
@@ -185,8 +203,21 @@ impl<'g> Generator<'g> {
                      start: usize, 
                      end: usize) -> GenResult {
 
-        let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
-        Ok(unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) })
+        Ok(match typ {
+            Type::Str => {
+                if let Node::Literal { typ: Type::ConstStr, value: val, .. } = *value {
+                    unsafe { LLVMBuildGlobalString(self.builder, self.cstr(&val), self.cstr(&name)) }
+                } else {
+                    panic!();
+                }
+            },
+            _ => {
+                //let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
+                //unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
+                let var = unsafe { LLVMAddGlobal(self.module, self.llvm_type(&typ), self.cstr(&name)) };
+                unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, var) }
+            },
+        })
     }
 
     fn const_statement(&mut self, 
@@ -220,6 +251,7 @@ impl<'g> Generator<'g> {
                 self.node(&node)?;
             }
         }
+        unsafe { LLVMBuildRetVoid(self.builder) };
         Ok(proc)
     }
 

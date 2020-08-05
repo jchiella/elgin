@@ -12,6 +12,7 @@ pub enum Type {
     Bool,
 
     I32,
+    Str,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +167,7 @@ impl<'p> Parser<'p> {
         if let Token::Ident(id) = self.peek().token.clone() {
             let typ = match id.as_str() {
                 "i32" => Type::I32,
+                "str" => Type::Str,
                 _ => return Err(Error::ExpectedType {found: self.peek().clone()}),
             };
             self.next();

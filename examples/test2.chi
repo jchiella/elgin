@@ -1,6 +1,8 @@
-proc f() { 
-    var x: i32 = 3 + 4
+proc f(n: i32) {
+    var y: i32 = 10
 }
-proc g() { 
-    f()
+proc main() { 
+    var s: str = "Hello world!"
+    var x: i32 = 100
+    f(x)
 }

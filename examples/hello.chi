@@ -1,1 +1,3 @@
-debug("Hello world!")
+proc main() {
+    puts("Hello world!")
+}
