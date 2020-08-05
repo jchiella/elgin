@@ -233,7 +233,7 @@ impl<'l> Lexer<'l> {
         Span {
             token: token.clone(),
             lineno: self.lineno + 1,
-            start: self.charno - token_len(&token) + 1, 
+            start: 0,//self.charno - token_len(&token) + 1, 
             end: self.charno + 1,
         }
     }

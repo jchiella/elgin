@@ -3,8 +3,7 @@ mod errors;
 mod lexer;
 mod parser;
 mod analysis;
-
-//mod codegen;
+mod codegen;
 
 use std::io::Write;
 use std::{io, env, fs};
@@ -46,12 +45,11 @@ fn repl() {
         println!("analysis output:");
         println!("{:#?}", analysis_results);
 
-        //let unwrapped = parse_results.unwrap();
-        //let mut generator = codegen::Generator::new(&unwrapped);
-        //let gen_results = generator.go();
-        //println!("______________________");
-        //println!("codegen output:");
-        //println!("{:#?}", gen_results);
+        let mut generator = codegen::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
+        generator.go().expect("GENERATION ERROR");
+        println!("______________________");
+        println!("codegen output:");
+        println!("{:#?}", generator.to_cstring().into_string());
     }
 }
 
@@ -80,10 +78,15 @@ fn file() {
     println!("analysis output:");
     println!("{:#?}", analysis_results);
 
-    //let unwrapped = parse_results.unwrap();
-    //let mut generator = codegen::Generator::new(&unwrapped);
-    //let gen_results = generator.go();
-    //println!("______________________");
-    //println!("codegen output:");
-    //println!("{:#?}", gen_results);
+    let mut generator = codegen::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
+    generator.go().expect("GENERATION ERROR");
+    println!("______________________");
+    println!("codegen output:");
+    println!("{:#?}", generator.to_cstring());
+
+    println!("Dumping to file...");
+    let mut file_name = env::args().nth(1).unwrap();
+    file_name.push_str(".ll");
+    generator.dump_to_file(&file_name);
+    println!("File done!");
 }

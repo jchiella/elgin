@@ -1,0 +1,6 @@
+proc f() { 
+    var x: i32 = 3 + 4
+}
+proc g() { 
+    f()
+}

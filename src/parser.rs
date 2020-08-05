@@ -179,7 +179,6 @@ impl<'p> Parser<'p> {
         let mut nodes = vec![];
         loop {
             nodes.push(self.statement()?);
-            dbg!(self.peek());
             self.ensure_next(Token::Newline)?;
             if self.peek().token == Token::EOF {
                 break;
