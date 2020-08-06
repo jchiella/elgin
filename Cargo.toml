@@ -1,6 +1,6 @@
 [package]
-name = "chi"
-version = "0.1.0"
+name = "elgin"
+version = "0.0.1"
 authors = ["jch"]
 edition = "2018"
 

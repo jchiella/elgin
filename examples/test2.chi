@@ -1,8 +1,0 @@
-proc f(n: i32) {
-    var y: i32 = 10
-}
-proc main() { 
-    var s: str = "Hello world!"
-    var x: i32 = 100
-    f(x)
-}

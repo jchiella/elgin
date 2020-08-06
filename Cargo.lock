@@ -16,8 +16,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9a06fb2e53271d7c279ec1efea6ab691c35a2ae67ec0d91d7acec0caf13b518"
 
 [[package]]
-name = "chi"
-version = "0.1.0"
+name = "elgin"
+version = "0.0.1"
 dependencies = [
  "llvm-sys",
 ]
