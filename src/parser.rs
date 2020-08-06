@@ -3,7 +3,7 @@
 use crate::lexer::{Token, Span};
 use crate::errors::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     ConstInt,
     ConstFloat,

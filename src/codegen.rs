@@ -6,6 +6,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use std::ffi::{CString, CStr};
+use std::collections::HashMap;
 
 use crate::errors::Error;
 use crate::parser::{Node, Type};
@@ -14,10 +15,15 @@ type GenResult = Result<LLVMValueRef, Error>;
 
 pub struct Generator<'g> {
     ast: &'g [Node], 
+
     context: *mut llvm::LLVMContext,
     builder: *mut llvm::LLVMBuilder,
     module: *mut llvm::LLVMModule,
+
     strings: Vec<CString>,
+
+    scope: HashMap<String, LLVMValueRef>,
+    constants: HashMap<String, LLVMValueRef>,
 }
 
 impl<'g> Generator<'g> {
@@ -29,10 +35,15 @@ impl<'g> Generator<'g> {
 
         Generator {
             ast,
+
             context,
             builder,
             module,
+
             strings: vec![],
+
+            scope: HashMap::new(),
+            constants: HashMap::new(),
         }
     }
 
@@ -96,7 +107,14 @@ impl<'g> Generator<'g> {
         for arg in args {
             llvm_args.push(self.node(&arg)?);
         }
-        Ok(unsafe { LLVMBuildCall(self.builder, LLVMGetNamedFunction(self.module, self.cstr(&name)), llvm_args.as_mut_ptr(), llvm_args.len() as u32, self.cstr("tmpcall")) })
+        Ok(unsafe { 
+            let proc = LLVMGetNamedFunction(self.module, self.cstr(&name));
+            if LLVMGetTypeKind(LLVMGetReturnType(LLVMGetCalledFunctionType(proc))) != llvm::LLVMTypeKind::LLVMVoidTypeKind {
+                LLVMBuildCall(self.builder, LLVMGetNamedFunction(self.module, self.cstr(&name)), llvm_args.as_mut_ptr(), llvm_args.len() as u32, self.cstr("tmpcall")) 
+            } else {
+                LLVMBuildCall(self.builder, LLVMGetNamedFunction(self.module, self.cstr(&name)), llvm_args.as_mut_ptr(), llvm_args.len() as u32, 0 as *const i8) 
+            }
+        })
     }
 
     fn infix_op(&mut self, 
@@ -163,8 +181,11 @@ impl<'g> Generator<'g> {
                     start: usize, 
                     end: usize) -> GenResult {
         Ok(unsafe { 
-            let var = LLVMGetNamedGlobal(self.module, self.cstr(&name));
-            LLVMBuildLoad(self.builder, var, self.cstr("tmpload"))
+            if let Some(_) = self.scope.get(&name) {
+                LLVMBuildLoad(self.builder, self.scope[&name], self.cstr("tmpload"))
+            } else {
+                self.constants[&name]
+            }
         })
     }
 
@@ -204,18 +225,11 @@ impl<'g> Generator<'g> {
                      end: usize) -> GenResult {
 
         Ok(match typ {
-            Type::Str => {
-                if let Node::Literal { typ: Type::ConstStr, value: val, .. } = *value {
-                    unsafe { LLVMBuildGlobalString(self.builder, self.cstr(&val), self.cstr(&name)) }
-                } else {
-                    panic!();
-                }
-            },
+            Type::Str => panic!(),
             _ => {
-                //let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
-                //unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
-                let var = unsafe { LLVMAddGlobal(self.module, self.llvm_type(&typ), self.cstr(&name)) };
-                unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, var) }
+                let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
+                self.scope.insert(name, alloca);
+                unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
             },
         })
     }
@@ -227,7 +241,20 @@ impl<'g> Generator<'g> {
                        lineno: usize, 
                        start: usize, 
                        end: usize) -> GenResult {
-        todo!()
+        Ok(match *value {
+            Node::Literal { typ: Type::ConstStr, value: v, .. } => {
+                let strptr = unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&v), self.cstr(&name)) };
+                self.constants.insert(name, strptr);
+                strptr
+            },
+            Node::Literal { typ: t, value: v, .. } => {
+                let global = unsafe { LLVMAddGlobal(self.module, self.llvm_type(&t), self.cstr(&name)) };
+                unsafe { LLVMSetGlobalConstant(global, 1) };
+                self.constants.insert(name, global);
+                global
+            },
+            _ => panic!(),
+        })
     }
 
     fn proc_statement(&mut self, 
@@ -239,6 +266,7 @@ impl<'g> Generator<'g> {
                       lineno: usize, 
                       start: usize, 
                       end: usize) -> GenResult {
+        self.scope.clear();
         let mut param_types: Vec<_> = arg_types.iter().map(|t| self.llvm_type(t)).collect();
         let proc_type = unsafe { LLVMFunctionType(self.llvm_type(&ret_type), param_types.as_mut_ptr(), args.len() as u32, 0) };
         let proc = unsafe { LLVMAddFunction(self.module, self.cstr(&name), proc_type) };
@@ -246,12 +274,25 @@ impl<'g> Generator<'g> {
             let entry_block = LLVMAppendBasicBlockInContext(self.context, proc, self.cstr("entry"));
             LLVMPositionBuilderAtEnd(self.builder, entry_block);
         }
+        unsafe {
+            for (i, arg) in args.iter().enumerate() {
+                let alloca_type = self.llvm_type(&arg_types[i]);
+                let nm = self.cstr(&arg);
+                let alloca = LLVMBuildAlloca(self.builder, alloca_type, nm);
+                self.scope.insert(arg.clone(), alloca);
+                LLVMBuildStore(self.builder, LLVMGetParam(proc, i as u32), alloca);
+            }
+        }
         if let Node::Block{ nodes, .. } = *body {
             for node in nodes {
                 self.node(&node)?;
             }
         }
-        unsafe { LLVMBuildRetVoid(self.builder) };
+        if ret_type == Type::Undefined {
+            unsafe { LLVMBuildRetVoid(self.builder) };
+        } else {
+            unsafe { LLVMBuildRet(self.builder, LLVMGetLastInstruction(LLVMGetLastBasicBlock(proc))) };
+        }
         Ok(proc)
     }
 
@@ -260,6 +301,8 @@ impl<'g> Generator<'g> {
             Type::I32 => unsafe { LLVMInt32TypeInContext(self.context) },
             Type::ConstInt => unsafe { LLVMInt32TypeInContext(self.context) },
             Type::Undefined => unsafe { LLVMVoidTypeInContext(self.context) },
+            Type::Str => unsafe { LLVMPointerType(LLVMInt8TypeInContext(self.context), 0) },
+            Type::ConstStr => unsafe { LLVMPointerType(LLVMInt8TypeInContext(self.context), 0) },
             _ => todo!(),
         }
     }

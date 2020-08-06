@@ -1,3 +1,9 @@
+proc say_twice(s: str): i32 {
+    puts(s)
+    puts(s)
+}
 proc main() {
-    puts("Hello world!")
+    const s: str = "Hello world!"
+
+    var i: i32 = say_twice(s)
 }
