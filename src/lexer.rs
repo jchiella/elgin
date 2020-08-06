@@ -210,14 +210,18 @@ impl<'l> Lexer<'l> {
                 ch if ch == '\n' => {
                     // token::proc doesn't matter, just needs to be
                     // something that doesn't trigger newline suppression
-                    match tokens.last().unwrap_or(&Span {token: Token::Proc, lineno: 0, start: 0, end: 0}).token {
-                        Token::Op(_) | Token::Comma => self.next(),
-                        _ if self.nesting != 0 => self.next(),
-                        _ => {
-                            tokens.push(self.spanned(Token::Newline));
-                            self.next()
-                        },
-                    };
+                    if tokens.last().unwrap().token == Token::Newline {
+                        self.next(); // skip consecutive newlines
+                    } else {
+                        match tokens.last().unwrap_or(&Span {token: Token::Proc, lineno: 0, start: 0, end: 0}).token {
+                            Token::Op(_) | Token::Comma => self.next(),
+                            _ if self.nesting != 0 => self.next(),
+                            _ => {
+                                tokens.push(self.spanned(Token::Newline));
+                                self.next()
+                            },
+                        };
+                    }
                 },
                 ch if ch.is_ascii_whitespace() => {
                     self.next();
