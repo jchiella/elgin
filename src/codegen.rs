@@ -64,6 +64,10 @@ impl<'g> Generator<'g> {
             let mut puts_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
             let puts_type = LLVMFunctionType(LLVMInt32TypeInContext(self.context), puts_arg_types.as_mut_ptr(), 1, 0);
             LLVMAddFunction(self.module, self.cstr("puts"), puts_type);
+            
+            let mut printf_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
+            let printf_type = LLVMFunctionType(LLVMInt32TypeInContext(self.context), printf_arg_types.as_mut_ptr(), 1, 1);
+            LLVMAddFunction(self.module, self.cstr("printf"), printf_type);
         }
     }
 
