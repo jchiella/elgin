@@ -103,6 +103,13 @@ pub enum Node {
         start: usize,
         end: usize,
     },
+    AssignStatement {
+        name: String,
+        value: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
     ProcStatement {
         name: String,
         args: Vec<String>,
@@ -197,6 +204,7 @@ impl<'p> Parser<'p> {
             Token::Var => self.var_statement()?,
             Token::Const => self.const_statement()?,
             Token::Proc => self.proc_statement()?,
+            Token::Ident(_) if self.tokens[self.index + 1].token == Token::Equals => self.assign_statement()?,
             _ => self.expr(0)?,
         })
     }
@@ -303,6 +311,18 @@ impl<'p> Parser<'p> {
         Ok(Node::VarStatement {
             name,
             typ,
+            value: Box::new(value),
+            lineno: 0, start: 0, end: 0,
+        })
+    }
+
+    fn assign_statement(&mut self) -> Result<Node, Error> {
+        let name = self.ensure_ident()?;
+        self.ensure_next(Token::Equals)?;
+        let value = self.expr(0)?;
+
+        Ok(Node::AssignStatement {
+            name,
             value: Box::new(value),
             lineno: 0, start: 0, end: 0,
         })

@@ -82,6 +82,7 @@ impl<'g> Generator<'g> {
             Block { nodes, lineno, start, end, } => self.block(nodes, lineno, start, end)?,
             VarStatement { name, typ, value, lineno, start, end, } => self.var_statement(name, typ, value, lineno, start, end)?,
             ConstStatement { name, typ, value, lineno, start, end, } => self.const_statement(name, typ, value, lineno, start, end)?,
+            AssignStatement { name, value, lineno, start, end, } => self.assign_statement(name, value, lineno, start, end)?,
             ProcStatement { name, args, arg_types, ret_type, body, lineno, start, end, } => self.proc_statement(name, args, arg_types, ret_type, body, lineno, start, end)?,
         })
     }
@@ -292,6 +293,16 @@ impl<'g> Generator<'g> {
                 unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
             },
         })
+    }
+
+    fn assign_statement(&mut self, 
+                        name: String, 
+                        value: Box<Node>, 
+                        lineno: usize, 
+                        start: usize, 
+                        end: usize) -> GenResult {
+
+        Ok(unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, self.scope[&name]) })
     }
 
     fn const_statement(&mut self, 

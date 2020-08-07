@@ -12,11 +12,14 @@ entry:
 
 whilecond:                                        ; preds = %whilebody, %entry
   %tmpload = load i32, i32* %x
-  %tmplt = icmp slt i32 %tmpload, 100
-  br i1 %tmplt, label %whilebody, label %whileend
+  %tmpgt = icmp sgt i32 %tmpload, 0
+  br i1 %tmpgt, label %whilebody, label %whileend
 
 whilebody:                                        ; preds = %whilecond
   %tmpcall = call i32 @puts(i8* getelementptr inbounds ([11 x i8], [11 x i8]* @tmpstr, i32 0, i32 0))
+  %tmpload1 = load i32, i32* %x
+  %tmpsub = sub i32 %tmpload1, 1
+  store i32 %tmpsub, i32* %x
   br label %whilecond
 
 whileend:                                         ; preds = %whilecond
