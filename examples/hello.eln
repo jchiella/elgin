@@ -1,9 +1,6 @@
-proc say_twice(s: str): i32 {
-    puts(s)
-    puts(s)
-}
-
 proc main() {
-    const s: str = "Hello world!"
-    var i: i32 = say_twice(s)
+    var x: i32 = 10
+    while x < 100 {
+        puts("WHOOOO!!!!")
+    }
 }

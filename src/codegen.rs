@@ -24,6 +24,8 @@ pub struct Generator<'g> {
 
     scope: HashMap<String, LLVMValueRef>,
     constants: HashMap<String, LLVMValueRef>,
+
+    last_basic_block: LLVMBasicBlockRef,
 }
 
 impl<'g> Generator<'g> {
@@ -44,6 +46,8 @@ impl<'g> Generator<'g> {
 
             scope: HashMap::new(),
             constants: HashMap::new(),
+
+            last_basic_block: unsafe { 0 as LLVMBasicBlockRef },
         }
     }
 
@@ -126,12 +130,19 @@ impl<'g> Generator<'g> {
                 end: usize) -> GenResult {
         let left_val = self.node(&*left)?;
         let right_val = self.node(&*right)?;
+        use llvm::LLVMIntPredicate::*;
         Ok(unsafe {
             match op.as_str() {
                 "+" => LLVMBuildAdd(self.builder, left_val, right_val, self.cstr("tmpadd")),
                 "-" => LLVMBuildSub(self.builder, left_val, right_val, self.cstr("tmpsub")),
                 "*" => LLVMBuildMul(self.builder, left_val, right_val, self.cstr("tmpmul")),
                 "/" => LLVMBuildSDiv(self.builder, left_val, right_val, self.cstr("tmpdiv")),
+                "==" => LLVMBuildICmp(self.builder, LLVMIntEQ, left_val, right_val, self.cstr("tmpeq")),
+                "!=" => LLVMBuildICmp(self.builder, LLVMIntNE, left_val, right_val, self.cstr("tmpne")),
+                "<" => LLVMBuildICmp(self.builder, LLVMIntSLT, left_val, right_val, self.cstr("tmplt")),
+                ">" => LLVMBuildICmp(self.builder, LLVMIntSGT, left_val, right_val, self.cstr("tmpgt")),
+                "<=" => LLVMBuildICmp(self.builder, LLVMIntSLE, left_val, right_val, self.cstr("tmple")),
+                ">=" => LLVMBuildICmp(self.builder, LLVMIntSGE, left_val, right_val, self.cstr("tmpge")),
                 _ => todo!(),
             }
         })
@@ -147,6 +158,7 @@ impl<'g> Generator<'g> {
         Ok(unsafe {
             match op.as_str() {
                 "-" => LLVMBuildNeg(self.builder, right_val, self.cstr("tmpneg")),
+                "!" => LLVMBuildNot(self.builder, right_val, self.cstr("tmpnot")),
                 _ => todo!(),
             }
         })
@@ -196,7 +208,30 @@ impl<'g> Generator<'g> {
                     lineno: usize, 
                     start: usize, 
                     end: usize) -> GenResult {
-        todo!()
+        let cond = self.node(&condition)?;
+        let body_block = unsafe { LLVMInsertBasicBlockInContext(self.context, self.last_basic_block, self.cstr("ifbody")) };
+        let else_block = unsafe { LLVMInsertBasicBlockInContext(self.context, body_block, self.cstr("ifelse")) };
+        let end_block = unsafe { LLVMInsertBasicBlockInContext(self.context, else_block, self.cstr("ifend")) };
+        unsafe {
+            LLVMMoveBasicBlockAfter(body_block, self.last_basic_block);
+            LLVMMoveBasicBlockAfter(else_block, body_block);
+            LLVMMoveBasicBlockAfter(end_block, else_block);
+        }
+        self.last_basic_block = end_block;
+
+        let br = unsafe { LLVMBuildCondBr(self.builder, cond, body_block, else_block) };
+
+        unsafe {
+            LLVMPositionBuilderAtEnd(self.builder, body_block);
+            self.node(&body)?;
+            LLVMBuildBr(self.builder, end_block);
+            LLVMPositionBuilderAtEnd(self.builder, else_block);
+            self.node(&else_body)?;
+            LLVMBuildBr(self.builder, end_block);
+            LLVMPositionBuilderAtEnd(self.builder, end_block);
+        }
+
+        Ok(br)
     }
 
     fn while_statement(&mut self, 
@@ -205,7 +240,29 @@ impl<'g> Generator<'g> {
                        lineno: usize, 
                        start: usize, 
                        end: usize) -> GenResult {
-        todo!()
+        let cond_block = unsafe { LLVMInsertBasicBlockInContext(self.context, self.last_basic_block, self.cstr("whilecond")) };
+        let body_block = unsafe { LLVMInsertBasicBlockInContext(self.context, cond_block, self.cstr("whilebody")) };
+        let end_block = unsafe { LLVMInsertBasicBlockInContext(self.context, body_block, self.cstr("whileend")) };
+        unsafe {
+            LLVMMoveBasicBlockAfter(cond_block, self.last_basic_block);
+            LLVMMoveBasicBlockAfter(body_block, cond_block);
+            LLVMMoveBasicBlockAfter(end_block, body_block);
+        }
+        self.last_basic_block = end_block;
+        unsafe { LLVMBuildBr(self.builder, cond_block) };
+
+        unsafe { LLVMPositionBuilderAtEnd(self.builder, cond_block) };
+        let cond = self.node(&condition)?;
+        let br = unsafe { LLVMBuildCondBr(self.builder, cond, body_block, end_block) };
+
+        unsafe {
+            LLVMPositionBuilderAtEnd(self.builder, body_block);
+            self.node(&body)?;
+            LLVMBuildBr(self.builder, cond_block);
+            LLVMPositionBuilderAtEnd(self.builder, end_block);
+        }
+
+        Ok(br)
     }
 
     fn block(&mut self, 
@@ -213,7 +270,10 @@ impl<'g> Generator<'g> {
              lineno: usize, 
              start: usize, 
              end: usize) -> GenResult {
-        todo!()
+        for node in nodes {
+            self.node(&node)?;
+        }
+        Ok(unsafe { LLVMGetUndef(LLVMVoidType()) })
     }
 
     fn var_statement(&mut self, 
@@ -272,6 +332,7 @@ impl<'g> Generator<'g> {
         let proc = unsafe { LLVMAddFunction(self.module, self.cstr(&name), proc_type) };
         unsafe {
             let entry_block = LLVMAppendBasicBlockInContext(self.context, proc, self.cstr("entry"));
+            self.last_basic_block = entry_block;
             LLVMPositionBuilderAtEnd(self.builder, entry_block);
         }
         unsafe {
@@ -283,11 +344,7 @@ impl<'g> Generator<'g> {
                 LLVMBuildStore(self.builder, LLVMGetParam(proc, i as u32), alloca);
             }
         }
-        if let Node::Block{ nodes, .. } = *body {
-            for node in nodes {
-                self.node(&node)?;
-            }
-        }
+        self.node(&body)?;
         if ret_type == Type::Undefined {
             unsafe { LLVMBuildRetVoid(self.builder) };
         } else {

@@ -461,6 +461,7 @@ impl<'p> Parser<'p> {
 
 fn prefix_binding_power(op: &String) -> ((), u8) {
     match op.as_str() {
+        "!" => ((), 8),
         "+" | "-" => ((), 9),
         _ => unreachable!(),
     }
@@ -475,6 +476,7 @@ fn postfix_binding_power(op: &String) -> Option<(u8, ())> {
 
 fn infix_binding_power(op: &String) -> Option<(u8, u8)> {
     Some(match op.as_str() {
+        ">" | "<" | ">=" | "<=" | "==" | "!=" => (3, 4),
         "+" | "-" => (5, 6),
         "*" | "/" => (7, 8),
         _ => return None,
