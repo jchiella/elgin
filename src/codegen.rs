@@ -108,7 +108,7 @@ impl<'g> Generator<'g> {
                 | Type::N16
                 | Type::N32
                 | Type::N64
-                | Type::N128 => unsafe { LLVMConstInt(self.llvm_type(&typ), dbg!(value.parse().unwrap()), 0) },
+                | Type::N128 => unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) },
             Type::ConstFloat 
                 | Type::F32
                 | Type::F64
@@ -304,7 +304,7 @@ impl<'g> Generator<'g> {
         Ok(match typ {
             Type::Str => panic!(),
             _ => {
-                let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&dbg!(typ)), self.cstr(&name)) };
+                let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
                 self.scope.insert(name, alloca);
                 unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
             },

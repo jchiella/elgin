@@ -1,7 +1,4 @@
 proc main() {
-    var n: i128 = 0
-    while n <= 20 {
-        printf("%d ", n)
-        n = n + 1
-    }
+    var x: i32 = 10
+    x + 10 - 2
 }

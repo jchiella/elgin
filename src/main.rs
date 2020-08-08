@@ -2,6 +2,7 @@ mod errors;
 
 mod lexer;
 mod parser;
+mod ir;
 mod analysis;
 mod codegen;
 
@@ -13,43 +14,7 @@ fn main() {
     if let Some(_) = env::args().nth(1) {
         file();
     } else {
-        repl();
-    }
-}
-
-fn repl() {
-    let mut input = String::new();
-    loop {
-        print!("==> ");
-        io::stdout().flush().unwrap();
-
-        io::stdin().read_line(&mut input).unwrap();
-
-        let chars = &input.chars().collect::<Vec<_>>()[..];
-        let mut lexer = lexer::Lexer::new(chars);
-        let lex_results = lexer.go().unwrap();
-        println!("______________________");
-        println!("lexer output:");
-        lex_results.iter().map(|t| println!("{}", t)).for_each(drop);
-
-        let mut parser = parser::Parser::new(&lex_results);
-        let parse_results = parser.go();
-        println!("______________________");
-        println!("parser output:");
-        println!("{:#?}", parse_results);
-
-        let mut unwrapped = parse_results.unwrap();
-        let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
-        let analysis_results = analyzer.go();
-        println!("______________________");
-        println!("analysis output:");
-        println!("{:#?}", analysis_results);
-
-        let mut generator = codegen::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
-        generator.go().expect("GENERATION ERROR");
-        println!("______________________");
-        println!("codegen output:");
-        println!("{:#?}", generator.to_cstring().into_string());
+        panic!("Expected File")
     }
 }
 
@@ -72,6 +37,12 @@ fn file() {
     println!("{:#?}", parse_results);
 
     let mut unwrapped = parse_results.unwrap();
+    let mut irbuilder = ir::IRBuilder::new(&unwrapped);
+    let ir_results = irbuilder.go();
+    println!("______________________");
+    println!("IR output:");
+    println!("{:#?}", ir_results);
+
     let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
     let analysis_results = analyzer.go();
     println!("______________________");

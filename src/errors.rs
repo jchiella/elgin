@@ -21,6 +21,9 @@ pub enum Error {
     },
     InvalidAtTopLevel {
         node: Node,
-    }
+    },
+    VarNotInScope {
+        name: String,
+    },
 }
 
