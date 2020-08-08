@@ -30,7 +30,7 @@ pub enum Type {
 
     Str,
 
-    Unknown, // for type inference only
+    Unknown,
 }
 
 #[derive(Debug, Clone)]

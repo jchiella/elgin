@@ -47,6 +47,7 @@ pub enum IRTraits {
     Numeric,
 }
 
+
 #[derive(Debug, Clone)]
 pub enum IRType {
     Primitive(Type),
@@ -321,8 +322,8 @@ impl<'i> IRBuilder<'i> {
     fn parse_to_ir_type(&mut self, t: &Type) -> IRType {
         use Type::*;
         match t.clone() {
-            ConstInt => IRType::Variable(self.next_type_var(), vec![IRTraits::Integral]),
-            ConstFloat => IRType::Variable(self.next_type_var(), vec![IRTraits::Floating]),
+            ConstInt => IRType::Primitive(Type::I64),//IRType::Variable(self.next_type_var(), vec![IRTraits::Integral]),
+            ConstFloat => IRType::Primitive(Type::F64),//IRType::Variable(self.next_type_var(), vec![IRTraits::Floating]),
             ConstStr => todo!(),
 
             Undefined => IRType::Undefined,

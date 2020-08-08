@@ -52,6 +52,13 @@ impl<'g> Generator<'g> {
     pub fn go(&mut self) {
         self.build_header();
         for proc in self.procs {
+            unsafe {
+                let mut llvm_arg_types: Vec<_> = proc.arg_types.iter().map(|t| self.llvm_type(&t)).collect();
+                let proc_type = LLVMFunctionType(LLVMVoidTypeInContext(self.context), llvm_arg_types.as_mut_ptr(), 0, 0);
+                let proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
+                let bb = LLVMAppendBasicBlockInContext(self.context, proc, self.cstr("entry"));
+                LLVMPositionBuilderAtEnd(self.builder, bb);
+            }
             for ins in &proc.body {
                 self.ins(&ins.clone());
             }
@@ -112,7 +119,8 @@ impl<'g> Generator<'g> {
     fn load(&mut self, s: String, typ: IRType) {
         let var = self.lookup.get(&s).unwrap();
         unsafe {
-            LLVMBuildLoad2(self.builder, self.llvm_type(&typ), *var, self.cstr("tmpload"));
+            let ld = LLVMBuildLoad2(self.builder, self.llvm_type(&typ), *var, self.cstr("tmpload"));
+            self.stack.push(ld);
         }
     }
 
@@ -124,11 +132,11 @@ impl<'g> Generator<'g> {
     }
 
     fn allocate(&mut self, s: String, typ: IRType) {
-        //unsafe {
-        //    let name = self.cstr(&s);
-        //    let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
-        //    self.lookup.insert(s, alloca);
-        //} 
+        unsafe {
+            let name = self.cstr(&s);
+            let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
+            self.lookup.insert(s, alloca);
+        } 
     }
 
     fn return_(&mut self, typ: IRType) {
@@ -143,25 +151,29 @@ impl<'g> Generator<'g> {
 
     fn negate(&mut self, typ: IRType) {
         unsafe {
-            LLVMBuildNeg(self.builder, self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            let neg = LLVMBuildNeg(self.builder, self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            self.stack.push(neg);
         }
     }
 
     fn add(&mut self, typ: IRType) {
         unsafe {
-            LLVMBuildAdd(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            let add = LLVMBuildAdd(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpadd"));
+            self.stack.push(add);
         }
     }
 
     fn subtract(&mut self, typ: IRType) {
         unsafe {
-            LLVMBuildSub(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            let sub = LLVMBuildSub(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpsub"));
+            self.stack.push(sub);
         }
     }
 
     fn multiply(&mut self, typ: IRType) {
         unsafe {
-            LLVMBuildMul(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            let mul = LLVMBuildMul(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpmul"));
+            self.stack.push(mul);
         }
     }
 
