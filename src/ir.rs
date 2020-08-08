@@ -18,15 +18,15 @@ pub struct IRBuilder<'i> {
 }
 
 #[derive(Debug)]
-pub struct IRProc{
-    name: String,
-    arg_types: Vec<IRType>,
-    ret_type: IRType,
-    body: Vec<Instruction>,
+pub struct IRProc {
+    pub name: String,
+    pub arg_types: Vec<IRType>,
+    pub ret_type: IRType,
+    pub body: Vec<Instruction>,
 }
 
-#[derive(Debug)]
-enum InstructionType {
+#[derive(Debug, Clone)]
+pub enum InstructionType {
     Push(String), // pushes an immediate value to the stack
     Load(String), // pushes a variable's contents to the stack
     Store(String), // pops a value and stores it in variable
@@ -41,14 +41,14 @@ enum InstructionType {
 }
 
 #[derive(Debug, Clone)]
-enum IRTraits {
+pub enum IRTraits {
     Integral,
     Floating,
     Numeric,
 }
 
 #[derive(Debug, Clone)]
-enum IRType {
+pub enum IRType {
     Primitive(Type),
     Variable(usize, Vec<IRTraits>),
     Unknown,
@@ -57,13 +57,13 @@ enum IRType {
     NoReturn,
 }
 
-#[derive(Debug)]
-struct Instruction {
-    ins: InstructionType,
-    typ: IRType,
-    lineno: usize,
-    start: usize,
-    end: usize,
+#[derive(Debug, Clone)]
+pub struct Instruction {
+    pub ins: InstructionType,
+    pub typ: IRType,
+    pub lineno: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl<'i> IRBuilder<'i> {

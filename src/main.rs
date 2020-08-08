@@ -4,10 +4,10 @@ mod lexer;
 mod parser;
 mod ir;
 mod analysis;
-mod codegen;
+mod llvm;
+//mod codegen;
 
-use std::io::Write;
-use std::{io, env, fs};
+use std::{env, fs};
 use std::io::prelude::*;
 
 fn main() {
@@ -48,9 +48,10 @@ fn file() {
     println!("______________________");
     println!("analysis output:");
     println!("{:#?}", analysis_results);
-
-    let mut generator = codegen::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
-    generator.go().expect("GENERATION ERROR");
+    
+    let unwrapped = ir_results.unwrap();
+    let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
+    generator.go();
     println!("______________________");
     println!("codegen output:");
     println!("{:#?}", generator.to_cstring());
