@@ -1,6 +1,7 @@
 //! Errors
 
 use crate::lexer::{Token, Span};
+use crate::parser::Node;
 
 #[derive(Debug)]
 pub enum Error {
@@ -17,6 +18,9 @@ pub enum Error {
     },
     ExpectedType {
         found: Span,
+    },
+    InvalidAtTopLevel {
+        node: Node,
     }
 }
 

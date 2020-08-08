@@ -5,17 +5,28 @@ use crate::errors::Error;
 use crate::parser::Node;
 
 pub struct Analyzer<'a> {
-    ast: &'a [Node],
+    ast: &'a mut [Node],
 }
 
 impl<'a> Analyzer<'a> {
-    pub fn new(ast: &'a [Node]) -> Self {
+    pub fn new(ast: &'a mut [Node]) -> Self {
         Analyzer {
             ast,
         }
     }
 
-    pub fn go(&self) -> Result<(), Error> {
+    pub fn go(&mut self) -> Result<(), Error> {
+        self.verify_top_level_decls()?;
+        Ok(())
+    }
+
+    fn verify_top_level_decls(&mut self) -> Result<(), Error> {
+        for decl in self.ast {
+            match decl {
+                Node::ProcStatement { .. } | Node::ConstStatement { .. } => (),
+                n => return Err(Error::InvalidAtTopLevel { node: n.clone() }),
+            }
+        }
         Ok(())
     }
 }

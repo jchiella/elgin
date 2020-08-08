@@ -29,6 +29,8 @@ pub enum Type {
     F128,
 
     Str,
+
+    Unknown, // for type inference only
 }
 
 #[derive(Debug, Clone)]
@@ -327,8 +329,12 @@ impl<'p> Parser<'p> {
     fn var_statement(&mut self) -> Result<Node, Error> {
         self.ensure_next(Token::Var)?;
         let name = self.ensure_ident()?;
-        self.ensure_next(Token::Colon)?;
-        let typ = self.ensure_type()?;
+        let typ;
+        if self.ensure_next(Token::Colon).is_ok() {
+            typ = self.ensure_type()?;
+        } else {
+            typ = Type::Unknown;
+        }
         let value;
         if self.peek().token == Token::Equals {
             self.ensure_next(Token::Equals)?;
@@ -364,8 +370,12 @@ impl<'p> Parser<'p> {
     fn const_statement(&mut self) -> Result<Node, Error> {
         self.ensure_next(Token::Const)?;
         let name = self.ensure_ident()?;
-        self.ensure_next(Token::Colon)?;
-        let typ = self.ensure_type()?;
+        let typ;
+        if self.ensure_next(Token::Colon).is_ok() {
+            typ = self.ensure_type()?;
+        } else {
+            typ = Type::Unknown;
+        }
         self.ensure_next(Token::Equals)?;
         let value = self.expr(0)?;
 
