@@ -47,7 +47,7 @@ impl<'g> Generator<'g> {
             scope: HashMap::new(),
             constants: HashMap::new(),
 
-            last_basic_block: unsafe { 0 as LLVMBasicBlockRef },
+            last_basic_block: 0 as LLVMBasicBlockRef,
         }
     }
 
@@ -98,10 +98,22 @@ impl<'g> Generator<'g> {
                start: usize, 
                end: usize) -> GenResult {
         Ok(match typ {
-            Type::ConstInt => unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) },
-            Type::I32 => unsafe { LLVMConstInt(self.llvm_type(&typ), value.parse().unwrap(), 0) },
-            Type::ConstStr => unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&value), self.cstr("tmpstr")) },
-            Type::Str => unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&value), self.cstr("tmpstr")) },
+            Type::ConstInt 
+                | Type::I8
+                | Type::I16 
+                | Type::I32
+                | Type::I64
+                | Type::I128 
+                | Type::N8
+                | Type::N16
+                | Type::N32
+                | Type::N64
+                | Type::N128 => unsafe { LLVMConstInt(self.llvm_type(&typ), dbg!(value.parse().unwrap()), 0) },
+            Type::ConstFloat 
+                | Type::F32
+                | Type::F64
+                | Type::F128 => unsafe { LLVMConstReal(self.llvm_type(&typ), value.parse().unwrap()) },
+            Type::ConstStr | Type::Str => unsafe { LLVMBuildGlobalStringPtr(self.builder, self.cstr(&value), self.cstr("tmpstr")) },
             _ => todo!(),
         })
     }
@@ -163,7 +175,7 @@ impl<'g> Generator<'g> {
         Ok(unsafe {
             match op.as_str() {
                 "-" => LLVMBuildNeg(self.builder, right_val, self.cstr("tmpneg")),
-                "!" => LLVMBuildNot(self.builder, right_val, self.cstr("tmpnot")),
+                "!" => LLVMBuildNot(self.builder, right_val, self.cstr("tmpnot")), // TODO fix this to be `not`
                 _ => todo!(),
             }
         })
@@ -278,7 +290,7 @@ impl<'g> Generator<'g> {
         for node in nodes {
             self.node(&node)?;
         }
-        Ok(unsafe { LLVMGetUndef(LLVMVoidType()) })
+        Ok(unsafe { LLVMGetUndef(LLVMVoidType()) }) // throwaway value
     }
 
     fn var_statement(&mut self, 
@@ -292,7 +304,7 @@ impl<'g> Generator<'g> {
         Ok(match typ {
             Type::Str => panic!(),
             _ => {
-                let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&typ), self.cstr(&name)) };
+                let alloca = unsafe { LLVMBuildAlloca(self.builder, self.llvm_type(&dbg!(typ)), self.cstr(&name)) };
                 self.scope.insert(name, alloca);
                 unsafe { LLVMBuildStore(self.builder, self.node(&*value)?, alloca) }
             },
@@ -369,13 +381,27 @@ impl<'g> Generator<'g> {
     }
 
     fn llvm_type(&mut self, t: &Type) -> *mut llvm::LLVMType {
-        match t {
-            Type::I32 => unsafe { LLVMInt32TypeInContext(self.context) },
-            Type::ConstInt => unsafe { LLVMInt32TypeInContext(self.context) },
-            Type::Undefined => unsafe { LLVMVoidTypeInContext(self.context) },
-            Type::Str => unsafe { LLVMPointerType(LLVMInt8TypeInContext(self.context), 0) },
-            Type::ConstStr => unsafe { LLVMPointerType(LLVMInt8TypeInContext(self.context), 0) },
-            _ => todo!(),
+        unsafe  {
+            match t {
+                Type::I8 => LLVMInt8TypeInContext(self.context),
+                Type::I16 => LLVMInt16TypeInContext(self.context),
+                Type::I32 => LLVMInt32TypeInContext(self.context),
+                Type::I64 => LLVMInt64TypeInContext(self.context),
+                Type::I128 => LLVMInt128TypeInContext(self.context),
+                Type::N8 => LLVMInt8TypeInContext(self.context),
+                Type::N16 => LLVMInt16TypeInContext(self.context),
+                Type::N32 => LLVMInt32TypeInContext(self.context),
+                Type::N64 => LLVMInt64TypeInContext(self.context),
+                Type::N128 => LLVMInt128TypeInContext(self.context),
+                Type::ConstInt => LLVMInt128TypeInContext(self.context), // TODO max bits for now
+
+                Type::Undefined => LLVMVoidTypeInContext(self.context),
+                Type::Bool => LLVMInt1TypeInContext(self.context),
+
+                Type::Str => LLVMPointerType(LLVMInt8TypeInContext(self.context), 0),
+                Type::ConstStr => LLVMPointerType(LLVMInt8TypeInContext(self.context), 0),
+                _ => todo!(),
+            }
         }
     }
 

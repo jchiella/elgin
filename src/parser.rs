@@ -8,10 +8,26 @@ pub enum Type {
     ConstInt,
     ConstFloat,
     ConstStr,
+
     Undefined,
     Bool,
 
+    I8,
+    I16,
     I32,
+    I64,
+    I128,
+
+    N8,
+    N16,
+    N32,
+    N64,
+    N128,
+
+    F32,
+    F64,
+    F128,
+
     Str,
 }
 
@@ -173,7 +189,24 @@ impl<'p> Parser<'p> {
     fn ensure_type(&mut self) -> Result<Type, Error> {
         if let Token::Ident(id) = self.peek().token.clone() {
             let typ = match id.as_str() {
+                "i8" => Type::I8,
+                "i16" => Type::I16,
                 "i32" => Type::I32,
+                "i64" => Type::I64,
+                "i128" => Type::I128,
+
+                "n8" => Type::N8,
+                "n16" => Type::N16,
+                "n32" => Type::N32,
+                "n64" => Type::N64,
+                "n128" => Type::N128,
+
+                "f32" => Type::F32,
+                "f64" => Type::F64,
+                "f128" => Type::F128,
+
+                "bool" => Type::Bool,
+
                 "str" => Type::Str,
                 _ => return Err(Error::ExpectedType {found: self.peek().clone()}),
             };
@@ -483,7 +516,7 @@ fn prefix_binding_power(op: &String) -> ((), u8) {
     match op.as_str() {
         "!" => ((), 8),
         "+" | "-" => ((), 9),
-        _ => unreachable!(),
+        o => unreachable!(o),
     }
 }
 
