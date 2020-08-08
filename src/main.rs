@@ -38,8 +38,8 @@ fn repl() {
         println!("parser output:");
         println!("{:#?}", parse_results);
 
-        let unwrapped = parse_results.unwrap();
-        let analyzer = analysis::Analyzer::new(&unwrapped);
+        let mut unwrapped = parse_results.unwrap();
+        let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
         let analysis_results = analyzer.go();
         println!("______________________");
         println!("analysis output:");
@@ -71,8 +71,8 @@ fn file() {
     println!("parser output:");
     println!("{:#?}", parse_results);
 
-    let unwrapped = parse_results.unwrap();
-    let analyzer = analysis::Analyzer::new(&unwrapped);
+    let mut unwrapped = parse_results.unwrap();
+    let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
     let analysis_results = analyzer.go();
     println!("______________________");
     println!("analysis output:");

@@ -21,7 +21,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn verify_top_level_decls(&mut self) -> Result<(), Error> {
-        for decl in self.ast {
+        for decl in self.ast.iter_mut() {
             match decl {
                 Node::ProcStatement { .. } | Node::ConstStatement { .. } => (),
                 n => return Err(Error::InvalidAtTopLevel { node: n.clone() }),
