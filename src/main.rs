@@ -43,10 +43,9 @@ fn file() {
     println!("IR output:");
     println!("{:#?}", *ir_results.unwrap());
 
-    irbuilder.analyze().unwrap();
     println!("______________________");
     println!("analysis output:");
-    println!("COMING SOON!");
+    irbuilder.analyze().unwrap();
     
     //let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
     //generator.go();

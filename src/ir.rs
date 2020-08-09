@@ -15,8 +15,8 @@ type Scope = HashMap<String, IRType>;
 pub struct IRBuilder<'i> {
     ast: &'i [Node],
     pub available_type_var: usize,
-    scopes: Vec<Scope>,
-    procs: Vec<IRProc>,
+    pub scopes: Vec<Scope>,
+    pub procs: Vec<IRProc>,
 }
 
 #[derive(Debug, Clone)]
@@ -344,7 +344,7 @@ impl<'i> IRBuilder<'i> {
         self.available_type_var - 1
     }
 
-    fn locate_var(&mut self, name: &String) -> Result<IRType, Error> {
+    pub fn locate_var(&self, name: &String) -> Result<IRType, Error> {
         let mut scope_index = self.scopes.len() - 1;
         while scope_index >= 0 {
             if let Some(typ) = self.scopes[scope_index].get(name) {
