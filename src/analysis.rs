@@ -72,6 +72,64 @@ impl<'i> IRBuilder<'i> {
         for (t1, t2) in constraints {
             println!("{:?} == {:?}", t1, t2);
         }
-        todo!()
+        let mut new_body = proc.body.clone();
+        let mut new_constraints = constraints.clone();
+
+        for (t1, t2) in constraints {
+            // set t1 == t2
+            new_body = substitute_proc_body(new_body, t1, t2); // replace in the proc
+            new_constraints = substitute_constraints(&new_constraints, t1, t2); // replace in the rules
+        }
+
+        Ok(dbg!(IRProc {
+            name: proc.name.clone(),
+            arg_types: proc.arg_types.clone(),
+            ret_type: proc.ret_type.clone(),
+            body: new_body,
+        }))
+
     }
+
+}
+
+fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec<Instruction> {
+    let mut new_body = vec![];
+
+    for ins in body {
+        new_body.push(Instruction {
+            ins: ins.ins,
+            typ: if ins.typ == *t1 {
+                t2.clone()
+            } else {
+                ins.typ
+            },
+            lineno: ins.lineno,
+            start: ins.start,
+            end: ins.end,
+
+        });
+    }
+    new_body
+}
+
+fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -> Constraints {
+    let mut new_constraints = HashMap::new();
+
+    for (left, right) in constraints {
+        let new_left = if *left == *t1 {
+            t2.clone()
+        } else {
+            left.clone()
+        };
+
+        let new_right = if *right == *t1 {
+            t2.clone()
+        } else {
+            right.clone()
+        };
+
+        new_constraints.insert(new_left, new_right);
+    }
+
+    new_constraints
 }
