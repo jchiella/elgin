@@ -14,8 +14,9 @@ type Scope = HashMap<String, IRType>;
 
 pub struct IRBuilder<'i> {
     ast: &'i [Node],
-    available_type_var: usize,
+    pub available_type_var: usize,
     scopes: Vec<Scope>,
+    procs: Vec<IRProc>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,12 +27,11 @@ pub struct IRProc {
     pub body: Vec<Instruction>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstructionType {
     Push(String), // pushes an immediate value to the stack
     Load(String), // pushes a variable's contents to the stack
-    Store(String), // pops a value and stores it in variable
-    Allocate(String), // creates a new local variable
+    Allocate(String), // creates a new local variable and gives it the top value of the stack
 
     Return,
 
@@ -41,22 +41,27 @@ pub enum InstructionType {
     Multiply,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum IRTraits {
-    Integral,
-    Floating,
-    Numeric,
-}
-
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum IRType {
     Primitive(Type),
-    Variable(usize, Vec<IRTraits>),
-    Unknown,
+    Variable(usize),
 
     Undefined,
     NoReturn,
+}
+
+impl fmt::Debug for IRType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IRType::Primitive(t) => write!(f, "{:?}", t),
+            IRType::Variable(n) => {
+                write!(f, "${}", n)
+            },
+            IRType::Undefined => write!(f, "Undefined"),
+            IRType::NoReturn => write!(f, "NoReturn"),
+        }?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -80,23 +85,24 @@ impl<'i> IRBuilder<'i> {
             ast,
             available_type_var: 0,
             scopes: vec![],
+            procs: vec![],
         }
     }
 
-    pub fn go(&mut self) -> Result<Vec<IRProc>, Error> {
-        let mut procs = vec![];
+    pub fn go(&mut self) -> Result<&Vec<IRProc>, Error> {
         for node in self.ast {
             match node.clone() {
                 Node::ConstStatement { name, typ, value, lineno, start, end, } => {
                     self.const_statement(name, typ, value, lineno, start, end)?;
                 },
                 Node::ProcStatement { name, args, arg_types, ret_type, body, lineno, start, end, } => {
-                    procs.push(self.proc_statement(name, args, arg_types, ret_type, body, lineno, start, end)?)
+                    let pstat = self.proc_statement(name, args, arg_types, ret_type, body, lineno, start, end)?;
+                    self.procs.push(pstat);
                 },
                 n => return Err(Error::InvalidAtTopLevel { node: n }),
             }
         }
-        Ok(procs)
+        Ok(&self.procs)
     }
 
     fn node(&mut self, node: &Node) -> IRResult {
@@ -128,7 +134,7 @@ impl<'i> IRBuilder<'i> {
         Ok(vec![
             Instruction {
                 ins: InstructionType::Push(value),
-                typ: self.parse_to_ir_type(&typ),
+                typ: IRType::Variable(self.next_type_var()),
                 lineno, start, end,
             }
         ])
@@ -161,7 +167,7 @@ impl<'i> IRBuilder<'i> {
                 "*" => InstructionType::Multiply,
                 _ => todo!(),
             },
-            typ: IRType::Variable(self.next_type_var(), vec![IRTraits::Numeric]),
+            typ: IRType::Variable(self.next_type_var()),
             lineno, start, end,
         });
         Ok(res)
@@ -180,7 +186,7 @@ impl<'i> IRBuilder<'i> {
                 "-" => InstructionType::Negate,
                 _ => todo!(),
             },
-            typ: IRType::Variable(self.next_type_var(), vec![IRTraits::Numeric]),
+            typ: IRType::Variable(self.next_type_var()),
             lineno, start, end,
         });
         Ok(res)
@@ -253,19 +259,12 @@ impl<'i> IRBuilder<'i> {
                      lineno: usize, 
                      start: usize, 
                      end: usize) -> IRResult {
-        let ir_type = self.parse_to_ir_type(&typ);
-        self.scopes.last_mut().unwrap().insert(name.clone(), ir_type);
-        let mut res = vec![
-            Instruction {
-                ins: InstructionType::Allocate(name.clone()),
-                typ: self.parse_to_ir_type(&typ),
-                lineno, start, end,
-            },
-        ];
-        res.append(&mut self.node(&value)?);
+        let ir_type = IRType::Variable(self.next_type_var());
+        self.scopes.last_mut().unwrap().insert(name.clone(), ir_type.clone());
+        let mut res = self.node(&value)?;
         res.push(Instruction {
-            ins: InstructionType::Store(name),
-            typ: self.parse_to_ir_type(&typ),
+            ins: InstructionType::Allocate(name.clone()),
+            typ: ir_type,
             lineno, start, end,
         });
         Ok(res)
@@ -313,7 +312,7 @@ impl<'i> IRBuilder<'i> {
             }
             ins.push(Instruction {
                 ins: InstructionType::Return,
-                typ: self.parse_to_ir_type(&ret_type),
+                typ: IRType::Variable(self.next_type_var()),
                 lineno, start, end,
             });
             Ok(IRProc {
@@ -330,11 +329,12 @@ impl<'i> IRBuilder<'i> {
     fn parse_to_ir_type(&mut self, t: &Type) -> IRType {
         use Type::*;
         match t.clone() {
-            ConstInt => /*IRType::Primitive(Type::I64),*/IRType::Variable(self.next_type_var(), vec![IRTraits::Integral]),
-            ConstFloat => /*IRType::Primitive(Type::F64),*/IRType::Variable(self.next_type_var(), vec![IRTraits::Floating]),
+            ConstInt => IRType::Primitive(Type::I64),
+            ConstFloat => IRType::Primitive(Type::F64),
             ConstStr => todo!(),
 
             Undefined => IRType::Undefined,
+            Unknown => IRType::Variable(self.next_type_var()),
             typ => IRType::Primitive(typ),
         }
     }

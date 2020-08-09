@@ -83,7 +83,6 @@ impl<'g> Generator<'g> {
         match ins.clone().ins {
             Push(s) => self.push(s, typ),
             Load(s) => self.load(s, typ),
-            Store(s) => self.store(s, typ),
             Allocate(s) => self.allocate(s, typ),
 
             Return => self.return_(typ),
@@ -124,19 +123,16 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn store(&mut self, s: String, _typ: IRType) {
-        let var = self.lookup.get(&s).unwrap();
-        unsafe {
-            LLVMBuildStore(self.builder, self.stack.pop().unwrap(), *var);
-        }
-    }
-
     fn allocate(&mut self, s: String, typ: IRType) {
         unsafe {
             let name = self.cstr(&s);
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
-            self.lookup.insert(s, alloca);
+            self.lookup.insert(s.clone(), alloca);
         } 
+        let var = self.lookup.get(&s).unwrap();
+        unsafe {
+            LLVMBuildStore(self.builder, self.stack.pop().unwrap(), *var);
+        }
     }
 
     fn return_(&mut self, typ: IRType) {

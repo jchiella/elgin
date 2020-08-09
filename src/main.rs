@@ -36,32 +36,27 @@ fn file() {
     println!("parser output:");
     println!("{:#?}", parse_results);
 
-    let mut unwrapped = parse_results.unwrap();
+    let unwrapped = parse_results.unwrap();
     let mut irbuilder = ir::IRBuilder::new(&unwrapped);
     let ir_results = irbuilder.go();
     println!("______________________");
     println!("IR output:");
-    println!("{:#?}", ir_results);
+    println!("{:#?}", *ir_results.unwrap());
 
-    let mut unwrapped = ir_results.unwrap();
-    let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
-    analyzer.go().unwrap();
+    irbuilder.analyze().unwrap();
     println!("______________________");
     println!("analysis output:");
-    println!("Rules:");
-    println!("{:#?}", analyzer.rules);
-    println!("IR post-analysis:");
-    println!("{:#?}", analyzer.procs);
+    println!("COMING SOON!");
     
-    let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
-    generator.go();
-    println!("______________________");
-    println!("codegen output:");
-    println!("{:#?}", generator.to_cstring());
+    //let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
+    //generator.go();
+    //println!("______________________");
+    //println!("codegen output:");
+    //println!("{:#?}", generator.to_cstring());
 
-    println!("Dumping to file...");
-    let mut file_name = env::args().nth(1).unwrap();
-    file_name.push_str(".ll");
-    generator.dump_to_file(&file_name);
-    println!("File done!");
+    //println!("Dumping to file...");
+    //let mut file_name = env::args().nth(1).unwrap();
+    //file_name.push_str(".ll");
+    //generator.dump_to_file(&file_name);
+    //println!("File done!");
 }
