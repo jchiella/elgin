@@ -43,13 +43,16 @@ fn file() {
     println!("IR output:");
     println!("{:#?}", ir_results);
 
+    let mut unwrapped = ir_results.unwrap();
     let mut analyzer = analysis::Analyzer::new(&mut unwrapped);
-    let analysis_results = analyzer.go();
+    analyzer.go().unwrap();
     println!("______________________");
     println!("analysis output:");
-    println!("{:#?}", analysis_results);
+    println!("Rules:");
+    println!("{:#?}", analyzer.rules);
+    println!("IR post-analysis:");
+    println!("{:#?}", analyzer.procs);
     
-    let unwrapped = ir_results.unwrap();
     let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
     generator.go();
     println!("______________________");

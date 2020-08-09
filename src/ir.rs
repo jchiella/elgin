@@ -6,6 +6,7 @@ use crate::errors::Error;
 use crate::parser::{Node, Type};
 
 use std::collections::HashMap;
+use std::fmt;
 
 type IRResult = Result<Vec<Instruction>, Error>;
 
@@ -17,7 +18,7 @@ pub struct IRBuilder<'i> {
     scopes: Vec<Scope>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IRProc {
     pub name: String,
     pub arg_types: Vec<IRType>,
@@ -40,7 +41,7 @@ pub enum InstructionType {
     Multiply,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IRTraits {
     Integral,
     Floating,
@@ -48,7 +49,7 @@ pub enum IRTraits {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IRType {
     Primitive(Type),
     Variable(usize, Vec<IRTraits>),
@@ -58,13 +59,19 @@ pub enum IRType {
     NoReturn,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Instruction {
     pub ins: InstructionType,
     pub typ: IRType,
     pub lineno: usize,
     pub start: usize,
     pub end: usize,
+}
+
+impl fmt::Debug for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {:?}", self.ins, self.typ) 
+    }
 }
 
 impl<'i> IRBuilder<'i> {
@@ -145,6 +152,7 @@ impl<'i> IRBuilder<'i> {
                 end: usize) -> IRResult {
         let mut res = vec![];
         res.append(&mut self.node(&left)?);
+
         res.append(&mut self.node(&right)?);
         res.push(Instruction {
             ins: match op.as_str() {
@@ -322,8 +330,8 @@ impl<'i> IRBuilder<'i> {
     fn parse_to_ir_type(&mut self, t: &Type) -> IRType {
         use Type::*;
         match t.clone() {
-            ConstInt => IRType::Primitive(Type::I64),//IRType::Variable(self.next_type_var(), vec![IRTraits::Integral]),
-            ConstFloat => IRType::Primitive(Type::F64),//IRType::Variable(self.next_type_var(), vec![IRTraits::Floating]),
+            ConstInt => /*IRType::Primitive(Type::I64),*/IRType::Variable(self.next_type_var(), vec![IRTraits::Integral]),
+            ConstFloat => /*IRType::Primitive(Type::F64),*/IRType::Variable(self.next_type_var(), vec![IRTraits::Floating]),
             ConstStr => todo!(),
 
             Undefined => IRType::Undefined,

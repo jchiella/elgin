@@ -25,5 +25,6 @@ pub enum Error {
     VarNotInScope {
         name: String,
     },
+    TypeError,
 }
 
