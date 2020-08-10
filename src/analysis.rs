@@ -60,21 +60,23 @@ impl<'i> IRBuilder<'i> {
                     //constraints.insert(type_to_return, ret_type);
                 },
 
-                Negate => (),
-                Add => {
+                Negate => {
+                    let t1 = stack.pop().unwrap();
+                    add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
+                },
+                Add | Subtract | Multiply => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
                     add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
                 },
-                Subtract => (),
-                Multiply => (),
 
                 Compare(_) => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
+                    add_constraint(&mut constraints, ins.typ.clone(), IRType::Primitive(Type::Bool));
                     stack.push(IRType::Primitive(Type::Bool));
                 },
             };
