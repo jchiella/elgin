@@ -1,14 +1,14 @@
 mod errors;
 
-mod lexer;
-mod parser;
-mod ir;
 mod analysis;
+mod ir;
+mod lexer;
 mod llvm;
+mod parser;
 //mod codegen;
 
-use std::{env, fs};
 use std::io::prelude::*;
+use std::{env, fs};
 
 fn main() {
     if let Some(_) = env::args().nth(1) {
@@ -46,7 +46,7 @@ fn file() {
     println!("______________________");
     println!("analysis output:");
     irbuilder.analyze().unwrap();
-    
+
     let mut generator = llvm::Generator::new(&irbuilder.procs, "chi", &env::args().nth(1).unwrap());
     generator.go();
     println!("______________________");

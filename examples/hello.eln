@@ -1,7 +1,11 @@
+proc fun_stuff(n: i64): i64 {
+    return n
+}
+
 proc main() {
     var x = 10
-    var y = 12.3
-    if x < 100 {
+    var y = 100.1
+    if fun_stuff(x) == x {
         y
     } else {
         x

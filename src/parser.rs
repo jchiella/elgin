@@ -1,7 +1,7 @@
 //! The Chi parser
 
-use crate::lexer::{Token, Span};
 use crate::errors::Error;
+use crate::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -44,9 +44,9 @@ pub enum Node {
     },
     Call {
         name: String,
-        args: Vec<Node>, 
-        lineno: usize, 
-        start: usize, 
+        args: Vec<Node>,
+        lineno: usize,
+        start: usize,
         end: usize,
     },
     InfixOp {
@@ -137,7 +137,13 @@ pub enum Node {
         lineno: usize,
         start: usize,
         end: usize,
-    }
+    },
+    ReturnStatement {
+        val: Box<Node>,
+        lineno: usize,
+        start: usize,
+        end: usize,
+    },
 }
 
 pub struct Parser<'p> {
@@ -147,17 +153,19 @@ pub struct Parser<'p> {
 
 impl<'p> Parser<'p> {
     pub fn new(tokens: &'p [Span]) -> Self {
-        Parser {
-            tokens,
-            index: 0,
-        }
+        Parser { tokens, index: 0 }
     }
 
     fn next(&mut self) -> Span {
         self.index += 1;
         if self.index >= self.tokens.len() {
             let last = self.tokens.last().unwrap();
-            return Span {token: Token::EOF, lineno: last.lineno, start: last.start, end: last.end}
+            return Span {
+                token: Token::EOF,
+                lineno: last.lineno,
+                start: last.start,
+                end: last.end,
+            };
         }
         self.tokens[self.index - 1].clone()
     }
@@ -165,7 +173,12 @@ impl<'p> Parser<'p> {
     fn peek(&mut self) -> Span {
         if self.index >= self.tokens.len() {
             let last = self.tokens.last().unwrap();
-            return Span {token: Token::EOF, lineno: last.lineno, start: last.start, end: last.end}
+            return Span {
+                token: Token::EOF,
+                lineno: last.lineno,
+                start: last.start,
+                end: last.end,
+            };
         }
         self.tokens[self.index].clone()
     }
@@ -175,7 +188,10 @@ impl<'p> Parser<'p> {
             self.next();
             Ok(())
         } else {
-            Err(Error::ExpectedToken {expected: t, found: self.peek().clone()})
+            Err(Error::ExpectedToken {
+                expected: t,
+                found: self.peek().clone(),
+            })
         }
     }
 
@@ -184,10 +200,12 @@ impl<'p> Parser<'p> {
             self.next();
             Ok(id)
         } else {
-            Err(Error::ExpectedIdent {found: self.peek().clone()})
+            Err(Error::ExpectedIdent {
+                found: self.peek().clone(),
+            })
         }
     }
-    
+
     fn ensure_type(&mut self) -> Result<Type, Error> {
         if let Token::Ident(id) = self.peek().token.clone() {
             let typ = match id.as_str() {
@@ -210,12 +228,18 @@ impl<'p> Parser<'p> {
                 "bool" => Type::Bool,
 
                 "str" => Type::Str,
-                _ => return Err(Error::ExpectedType {found: self.peek().clone()}),
+                _ => {
+                    return Err(Error::ExpectedType {
+                        found: self.peek().clone(),
+                    })
+                }
             };
             self.next();
             Ok(typ)
         } else {
-            Err(Error::ExpectedType {found: self.peek().clone()})
+            Err(Error::ExpectedType {
+                found: self.peek().clone(),
+            })
         }
     }
 
@@ -239,14 +263,17 @@ impl<'p> Parser<'p> {
             Token::Var => self.var_statement()?,
             Token::Const => self.const_statement()?,
             Token::Proc => self.proc_statement()?,
-            Token::Ident(_) if self.tokens[self.index + 1].token == Token::Equals => self.assign_statement()?,
+            Token::Return => self.return_statement()?,
+            Token::Ident(_) if self.tokens[self.index + 1].token == Token::Equals => {
+                self.assign_statement()?
+            }
             _ => self.expr(0)?,
         })
     }
 
     fn if_statement(&mut self, ensure_if: bool) -> Result<Node, Error> {
         if ensure_if {
-            self.ensure_next(Token::If)?; 
+            self.ensure_next(Token::If)?;
         }
         let condition = self.expr(0)?;
         let body = self.block()?;
@@ -276,35 +303,43 @@ impl<'p> Parser<'p> {
             condition: Box::new(condition),
             body: Box::new(body.clone()),
             else_body: Box::new(else_body),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
     fn while_statement(&mut self) -> Result<Node, Error> {
-        self.ensure_next(Token::While)?; 
+        self.ensure_next(Token::While)?;
         let condition = self.expr(0)?;
         let body = self.block()?;
 
         Ok(Node::WhileStatement {
             condition: Box::new(condition),
             body: Box::new(body.clone()),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
     fn loop_statement(&mut self) -> Result<Node, Error> {
-        self.ensure_next(Token::Loop)?; 
+        self.ensure_next(Token::Loop)?;
         let condition = Node::Literal {
             typ: Type::Bool,
             value: "true".to_owned(),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         };
         let body = self.block()?;
 
         Ok(Node::WhileStatement {
             condition: Box::new(condition),
             body: Box::new(body.clone()),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
@@ -323,7 +358,12 @@ impl<'p> Parser<'p> {
                 break;
             }
         }
-        Ok(Node::Block {nodes, lineno: 0, start: 0, end: 0})
+        Ok(Node::Block {
+            nodes,
+            lineno: 0,
+            start: 0,
+            end: 0,
+        })
     }
 
     fn var_statement(&mut self) -> Result<Node, Error> {
@@ -343,7 +383,9 @@ impl<'p> Parser<'p> {
             value = Node::Literal {
                 typ: Type::Undefined,
                 value: "undefined".to_owned(),
-                lineno: 0, start: 0, end: 0,
+                lineno: 0,
+                start: 0,
+                end: 0,
             };
         }
 
@@ -351,7 +393,9 @@ impl<'p> Parser<'p> {
             name,
             typ,
             value: Box::new(value),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
@@ -363,7 +407,9 @@ impl<'p> Parser<'p> {
         Ok(Node::AssignStatement {
             name,
             value: Box::new(value),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
@@ -383,7 +429,9 @@ impl<'p> Parser<'p> {
             name,
             typ,
             value: Box::new(value),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
@@ -406,7 +454,7 @@ impl<'p> Parser<'p> {
         self.ensure_next(Token::RParen)?;
         let ret_type;
         if self.ensure_next(Token::Colon).is_ok() {
-            ret_type = self.ensure_type()?; 
+            ret_type = self.ensure_type()?;
         } else {
             ret_type = Type::Undefined;
         }
@@ -418,13 +466,31 @@ impl<'p> Parser<'p> {
             arg_types,
             ret_type,
             body: Box::new(body),
-            lineno: 0, start: 0, end: 0,
+            lineno: 0,
+            start: 0,
+            end: 0,
+        })
+    }
+
+    fn return_statement(&mut self) -> Result<Node, Error> {
+        self.ensure_next(Token::Return)?;
+        let val = self.expr(0)?;
+        Ok(Node::ReturnStatement {
+            val: Box::new(val),
+            lineno: 0,
+            start: 0,
+            end: 0,
         })
     }
 
     fn expr(&mut self, min_bp: u8) -> Result<Node, Error> {
         let mut left = match self.next().clone() {
-            Span{ token: Token::Ident(id), lineno, start, end } => {
+            Span {
+                token: Token::Ident(id),
+                lineno,
+                start,
+                end,
+            } => {
                 if self.peek().token == Token::LParen {
                     self.next(); // pass the LParen;
                     let mut args = Vec::new();
@@ -439,55 +505,108 @@ impl<'p> Parser<'p> {
                     self.ensure_next(Token::RParen)?;
                     Node::Call {
                         name: id,
-                        args, lineno, start, end
+                        args,
+                        lineno,
+                        start,
+                        end,
                     }
                 } else {
                     Node::VariableRef {
-                          name: id,
-                          lineno, start, end 
+                        name: id,
+                        lineno,
+                        start,
+                        end,
                     }
                 }
+            }
+            Span {
+                token: Token::IntLiteral(int),
+                lineno,
+                start,
+                end,
+            } => Node::Literal {
+                typ: Type::ConstInt,
+                value: int,
+                lineno,
+                start,
+                end,
             },
-            Span{ token: Token::IntLiteral(int), lineno, start, end } => Node::Literal {
-                      typ: Type::ConstInt,
-                      value: int,
-                      lineno, start, end },
-            Span{ token: Token::FloatLiteral(float), lineno, start, end } => Node::Literal {
-                      typ: Type::ConstFloat,
-                      value: float,
-                      lineno, start, end },
-            Span{ token: Token::StrLiteral(s), lineno, start, end } => Node::Literal {
-                      typ: Type::ConstStr,
-                      value: s,
-                      lineno, start, end },
-            Span { token: Token::LParen, .. } => {
+            Span {
+                token: Token::FloatLiteral(float),
+                lineno,
+                start,
+                end,
+            } => Node::Literal {
+                typ: Type::ConstFloat,
+                value: float,
+                lineno,
+                start,
+                end,
+            },
+            Span {
+                token: Token::StrLiteral(s),
+                lineno,
+                start,
+                end,
+            } => Node::Literal {
+                typ: Type::ConstStr,
+                value: s,
+                lineno,
+                start,
+                end,
+            },
+            Span {
+                token: Token::LParen,
+                ..
+            } => {
                 let left = self.expr(0)?;
                 self.ensure_next(Token::RParen)?;
                 left
-            },
-            Span { token: Token::Op(op), lineno, start, end } => {
+            }
+            Span {
+                token: Token::Op(op),
+                lineno,
+                start,
+                end,
+            } => {
                 let ((), right_bp) = prefix_binding_power(&op);
                 let right = self.expr(right_bp)?;
-                Node::PrefixOp { op, right: Box::new(right), lineno, start, end }
-            },
-            Span { token: Token::EOF, lineno, end, .. } => return Err(Error::EOF { lineno, charno: end }),
+                Node::PrefixOp {
+                    op,
+                    right: Box::new(right),
+                    lineno,
+                    start,
+                    end,
+                }
+            }
+            Span {
+                token: Token::EOF,
+                lineno,
+                end,
+                ..
+            } => {
+                return Err(Error::EOF {
+                    lineno,
+                    charno: end,
+                })
+            }
             t => panic!("Bad token: {:?}", t),
         };
 
         loop {
             let op = match self.peek().token.clone() {
-                Token::EOF 
-                    | Token::Newline 
-                    | Token::RParen 
-                    | Token::RBracket 
-                    | Token::Comma 
-                    | Token::LBrace 
-                    | Token::RBrace => break,
+                Token::EOF
+                | Token::Newline
+                | Token::RParen
+                | Token::RBracket
+                | Token::Comma
+                | Token::LBrace
+                | Token::RBrace => break,
                 Token::Op(op) => op,
                 Token::LBracket => "[".to_owned(),
                 t => panic!("Bad token: {:?}", t),
             };
-            
+
             if let Some((left_bp, ())) = postfix_binding_power(&op) {
                 if left_bp < min_bp {
                     break;
@@ -497,9 +616,21 @@ impl<'p> Parser<'p> {
                 left = if op == "[" {
                     let right = self.expr(0)?;
                     self.ensure_next(Token::RBracket)?;
-                    Node::IndexOp { object: Box::new(left), index: Box::new(right), lineno: 0, start: 0, end: 0 }
+                    Node::IndexOp {
+                        object: Box::new(left),
+                        index: Box::new(right),
+                        lineno: 0,
+                        start: 0,
+                        end: 0,
+                    }
                 } else {
-                    Node::PostfixOp { op, left: Box::new(left), lineno: 0, start: 0, end: 0 }
+                    Node::PostfixOp {
+                        op,
+                        left: Box::new(left),
+                        lineno: 0,
+                        start: 0,
+                        end: 0,
+                    }
                 };
                 continue;
             }
@@ -511,7 +642,14 @@ impl<'p> Parser<'p> {
                 self.next();
 
                 let right = self.expr(right_bp)?;
-                left = Node::InfixOp { op, left: Box::new(left), right: Box::new(right), lineno: 0, start: 0, end: 0 };
+                left = Node::InfixOp {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    lineno: 0,
+                    start: 0,
+                    end: 0,
+                };
                 continue;
             }
 

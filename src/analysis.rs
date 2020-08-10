@@ -1,22 +1,25 @@
 //! The static analysis component of Elgin
-//! Does fun stuff like type inference 
+//! Does fun stuff like type inference
 
-use crate::parser::Type;
-use crate::ir::*;
 use crate::errors::Error;
+use crate::ir::*;
+use crate::parser::Type;
 
 use std::collections::HashMap;
 
 type Constraints = HashMap<IRType, IRType>;
 
 impl<'i> IRBuilder<'i> {
-
     pub fn analyze(&mut self) -> Result<(), Error> {
         self.scopes.clear();
         let mut new_procs = Vec::new();
         let mut index = 0;
         while index < self.procs.len() {
             self.scopes.push(HashMap::new());
+            let scope = self.scopes.last_mut().unwrap();
+            for (i, arg_type) in self.procs[index].arg_types.iter().enumerate() {
+                scope.insert(self.procs[index].arg_names[i].clone(), arg_type.clone());
+            }
             let proc = self.procs[index].clone();
             let constraints = self.gen_constraints(&proc)?;
             new_procs.push(self.solve_constraints(&proc, &constraints)?);
@@ -34,51 +37,69 @@ impl<'i> IRBuilder<'i> {
             match ins.ins.clone() {
                 Push(_) => {
                     stack.push(ins.typ.clone());
-                },
+                }
                 Load(var) => {
                     stack.push(self.locate_var(&var)?);
-                },
+                }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
                     let var_type = ins.typ.clone();
                     let scope_index = self.scopes.len() - 1;
                     self.scopes[scope_index].insert(var, var_type.clone());
-                    //constraints.insert(var_type, content_type);
                     add_constraint(&mut constraints, var_type, content_type);
-                },
+                }
 
                 Branch(_, _) => {
-                    add_constraint(&mut constraints, stack.pop().unwrap(), IRType::Primitive(Type::Bool));
-                },
+                    add_constraint(
+                        &mut constraints,
+                        stack.pop().unwrap(),
+                        IRType::Primitive(Type::Bool),
+                    );
+                }
                 Jump(_) => (),
                 Label(_) => (),
 
+                Call(proc_name) => {
+                    let proc = self.locate_proc(&proc_name)?;
+                    let arg_count = proc.arg_types.len();
+                    for t in &proc.arg_types {
+                        add_constraint(
+                            &mut constraints,
+                            stack.remove(stack.len() - arg_count),
+                            t.clone(),
+                        );
+                    }
+                    stack.push(proc.ret_type.clone());
+                }
                 Return => {
-                    //let type_to_return = stack.pop().unwrap();
+                    let type_to_return = stack.pop().unwrap();
                     //let ret_type = ins.typ.clone();
-                    //let ret_type2 = proc.ret_type;
-                    //constraints.insert(type_to_return, ret_type);
-                },
+                    constraints.insert(type_to_return, proc.ret_type.clone());
+                }
 
                 Negate => {
                     let t1 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
-                },
+                }
                 Add | Subtract | Multiply => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
                     add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
-                },
+                }
 
                 Compare(_) => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
-                    add_constraint(&mut constraints, ins.typ.clone(), IRType::Primitive(Type::Bool));
+                    add_constraint(
+                        &mut constraints,
+                        ins.typ.clone(),
+                        IRType::Primitive(Type::Bool),
+                    );
                     stack.push(IRType::Primitive(Type::Bool));
-                },
+                }
             };
         }
         Ok(constraints)
@@ -98,19 +119,19 @@ impl<'i> IRBuilder<'i> {
             for (t1, t2) in constraints {
                 // set t1 == t2
                 new_body = substitute_proc_body(new_body, t1, t2); // replace in the proc
-                new_constraints = substitute_constraints(&new_constraints, t1, t2); // replace in the rules
+                new_constraints = substitute_constraints(&new_constraints, t1, t2);
+                // replace in the rules
             }
         }
 
-        Ok(dbg!(IRProc {
+        Ok(IRProc {
             name: proc.name.clone(),
             arg_types: proc.arg_types.clone(),
+            arg_names: proc.arg_names.clone(),
             ret_type: proc.ret_type.clone(),
             body: new_body,
-        }))
-
+        })
     }
-
 }
 
 fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec<Instruction> {
@@ -130,7 +151,6 @@ fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec
             lineno: ins.lineno,
             start: ins.start,
             end: ins.end,
-
         });
     }
     new_body
@@ -140,9 +160,6 @@ fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -
     let mut new_constraints = HashMap::new();
 
     for (left, right) in constraints {
-        if left == right {
-            continue;
-        }
         let new_left = if *left == *t1 {
             t2.clone()
         } else {
@@ -161,12 +178,14 @@ fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -
     new_constraints
 }
 
-
 fn add_constraint(constraints: &mut Constraints, t1: IRType, t2: IRType) {
+    println!("Trying to add constraint: {:?} == {:?}", t1.clone(), t2.clone());
+    if t1 == t2 {
+        return;
+    }
     if let IRType::Variable(_) = t2 {
         constraints.insert(t2, t1);
     } else {
         constraints.insert(t1, t2);
     }
 }
-

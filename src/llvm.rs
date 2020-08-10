@@ -5,17 +5,17 @@ extern crate llvm_sys as llvm;
 use llvm::core::*;
 use llvm::prelude::*;
 
-use std::ffi::{CString, CStr};
 use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 
 use crate::errors::Error;
+use crate::ir::{CompareType, IRProc, IRType, Instruction, InstructionType};
 use crate::parser::Type;
-use crate::ir::{Instruction, InstructionType, IRProc, IRType, CompareType};
 
 type GenResult = Result<LLVMValueRef, Error>;
 
 pub struct Generator<'g> {
-    procs: &'g [IRProc], 
+    procs: &'g [IRProc],
 
     context: *mut llvm::LLVMContext,
     builder: *mut llvm::LLVMBuilder,
@@ -34,8 +34,16 @@ impl<'g> Generator<'g> {
     pub fn new(procs: &'g [IRProc], module_name: &str, file_name: &str) -> Self {
         let context = unsafe { LLVMContextCreate() };
         let builder = unsafe { LLVMCreateBuilderInContext(context) };
-        let module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_bytes().as_ptr() as *const _, context) };
-        unsafe { LLVMSetSourceFileName(module, file_name.as_bytes().as_ptr() as *const _, file_name.len()) };
+        let module = unsafe {
+            LLVMModuleCreateWithNameInContext(module_name.as_bytes().as_ptr() as *const _, context)
+        };
+        unsafe {
+            LLVMSetSourceFileName(
+                module,
+                file_name.as_bytes().as_ptr() as *const _,
+                file_name.len(),
+            )
+        };
 
         Generator {
             procs,
@@ -58,9 +66,16 @@ impl<'g> Generator<'g> {
         self.build_header();
         for proc in self.procs {
             unsafe {
-                let mut llvm_arg_types: Vec<_> = proc.arg_types.iter().map(|t| self.llvm_type(&t)).collect();
-                let proc_type = LLVMFunctionType(LLVMVoidTypeInContext(self.context), llvm_arg_types.as_mut_ptr(), 0, 0);
+                let mut llvm_arg_types: Vec<_> =
+                    proc.arg_types.iter().map(|t| self.llvm_type(&t)).collect();
+                let proc_type = LLVMFunctionType(
+                    LLVMVoidTypeInContext(self.context),
+                    llvm_arg_types.as_mut_ptr(),
+                    0,
+                    0,
+                );
                 for ins in &proc.body {
+                    // index labels before starting
                     if let InstructionType::Label(label) = ins.ins {
                         let mut lbl = "lbl".to_string();
                         lbl.push_str(&label.to_string());
@@ -70,7 +85,11 @@ impl<'g> Generator<'g> {
                 }
 
                 self.current_proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
-                let bb = LLVMAppendBasicBlockInContext(self.context, self.current_proc, self.cstr("entry"));
+                let bb = LLVMAppendBasicBlockInContext(
+                    self.context,
+                    self.current_proc,
+                    self.cstr("entry"),
+                );
                 LLVMPositionBuilderAtEnd(self.builder, bb);
             }
             for ins in &proc.body {
@@ -82,11 +101,21 @@ impl<'g> Generator<'g> {
     fn build_header(&mut self) {
         unsafe {
             let mut puts_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
-            let puts_type = LLVMFunctionType(LLVMInt32TypeInContext(self.context), puts_arg_types.as_mut_ptr(), 1, 0);
+            let puts_type = LLVMFunctionType(
+                LLVMInt32TypeInContext(self.context),
+                puts_arg_types.as_mut_ptr(),
+                1,
+                0,
+            );
             LLVMAddFunction(self.module, self.cstr("puts"), puts_type);
-            
+
             let mut printf_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
-            let printf_type = LLVMFunctionType(LLVMInt32TypeInContext(self.context), printf_arg_types.as_mut_ptr(), 1, 1);
+            let printf_type = LLVMFunctionType(
+                LLVMInt32TypeInContext(self.context),
+                printf_arg_types.as_mut_ptr(),
+                1,
+                1,
+            );
             LLVMAddFunction(self.module, self.cstr("printf"), printf_type);
         }
     }
@@ -103,6 +132,7 @@ impl<'g> Generator<'g> {
             Jump(l) => self.jump(l),
             Label(l) => self.label(l),
 
+            Call(pn) => self.call(pn),
             Return => self.return_(typ),
 
             Negate => self.negate(typ),
@@ -117,28 +147,39 @@ impl<'g> Generator<'g> {
     fn push(&mut self, s: String, typ: IRType) {
         unsafe {
             self.stack.push(match typ {
-                IRType::Primitive(Type::I8) 
-                    | IRType::Primitive(Type::I16) 
-                    | IRType::Primitive(Type::I32) 
-                    | IRType::Primitive(Type::I64) 
-                    | IRType::Primitive(Type::I128) => LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0),
-                IRType::Primitive(Type::N8) 
-                    | IRType::Primitive(Type::N16) 
-                    | IRType::Primitive(Type::N32) 
-                    | IRType::Primitive(Type::N64) 
-                    | IRType::Primitive(Type::N128) => LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0),
-                IRType::Primitive(Type::F32) 
-                    | IRType::Primitive(Type::F64) 
-                    | IRType::Primitive(Type::F128) => LLVMConstReal(self.llvm_type(&typ), s.parse().unwrap()),
+                IRType::Primitive(Type::I8)
+                | IRType::Primitive(Type::I16)
+                | IRType::Primitive(Type::I32)
+                | IRType::Primitive(Type::I64)
+                | IRType::Primitive(Type::I128) => {
+                    LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0)
+                }
+                IRType::Primitive(Type::N8)
+                | IRType::Primitive(Type::N16)
+                | IRType::Primitive(Type::N32)
+                | IRType::Primitive(Type::N64)
+                | IRType::Primitive(Type::N128) => {
+                    LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0)
+                }
+                IRType::Primitive(Type::F32)
+                | IRType::Primitive(Type::F64)
+                | IRType::Primitive(Type::F128) => {
+                    LLVMConstReal(self.llvm_type(&typ), s.parse().unwrap())
+                }
                 t => todo!("{:?}", t),
-            }) 
+            })
         }
     }
 
     fn load(&mut self, s: String, typ: IRType) {
         let var = self.lookup.get(&s).unwrap();
         unsafe {
-            let ld = LLVMBuildLoad2(self.builder, self.llvm_type(&typ), *var, self.cstr("tmpload"));
+            let ld = LLVMBuildLoad2(
+                self.builder,
+                self.llvm_type(&typ),
+                *var,
+                self.cstr("tmpload"),
+            );
             self.stack.push(ld);
         }
     }
@@ -148,11 +189,15 @@ impl<'g> Generator<'g> {
             let name = self.cstr(&s);
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
             self.lookup.insert(s.clone(), alloca);
-        } 
+        }
         let var = self.lookup.get(&s).unwrap();
         unsafe {
             LLVMBuildStore(self.builder, self.stack.pop().unwrap(), *var);
         }
+    }
+
+    fn call(&mut self, proc_name: String) {
+        todo!()
     }
 
     fn return_(&mut self, typ: IRType) {
@@ -174,21 +219,36 @@ impl<'g> Generator<'g> {
 
     fn add(&mut self, typ: IRType) {
         unsafe {
-            let add = LLVMBuildAdd(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpadd"));
+            let add = LLVMBuildAdd(
+                self.builder,
+                self.stack.pop().unwrap(),
+                self.stack.pop().unwrap(),
+                self.cstr("tmpadd"),
+            );
             self.stack.push(add);
         }
     }
 
     fn subtract(&mut self, typ: IRType) {
         unsafe {
-            let sub = LLVMBuildSub(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpsub"));
+            let sub = LLVMBuildSub(
+                self.builder,
+                self.stack.pop().unwrap(),
+                self.stack.pop().unwrap(),
+                self.cstr("tmpsub"),
+            );
             self.stack.push(sub);
         }
     }
 
     fn multiply(&mut self, typ: IRType) {
         unsafe {
-            let mul = LLVMBuildMul(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpmul"));
+            let mul = LLVMBuildMul(
+                self.builder,
+                self.stack.pop().unwrap(),
+                self.stack.pop().unwrap(),
+                self.cstr("tmpmul"),
+            );
             self.stack.push(mul);
         }
     }
@@ -196,28 +256,32 @@ impl<'g> Generator<'g> {
     fn compare(&mut self, comptype: CompareType, typ: IRType) {
         unsafe {
             use llvm::LLVMIntPredicate::*;
-            let cmp = LLVMBuildICmp(self.builder,
-                                    match comptype {
-                                        CompareType::EQ => LLVMIntEQ,
-                                        CompareType::NE => LLVMIntNE,
-                                        CompareType::LT => LLVMIntSLT,
-                                        CompareType::GT => LLVMIntSGT,
-                                        CompareType::LE => LLVMIntSLE,
-                                        CompareType::GE => LLVMIntSGE,
-                                    },
-                                    self.stack.pop().unwrap(),
-                                    self.stack.pop().unwrap(),
-                                    self.cstr("tmpcmp"));
+            let cmp = LLVMBuildICmp(
+                self.builder,
+                match comptype {
+                    CompareType::EQ => LLVMIntEQ,
+                    CompareType::NE => LLVMIntNE,
+                    CompareType::LT => LLVMIntSLT,
+                    CompareType::GT => LLVMIntSGT,
+                    CompareType::LE => LLVMIntSLE,
+                    CompareType::GE => LLVMIntSGE,
+                },
+                self.stack.pop().unwrap(),
+                self.stack.pop().unwrap(),
+                self.cstr("tmpcmp"),
+            );
             self.stack.push(cmp);
         }
     }
 
     fn branch(&mut self, then_label: usize, else_label: usize) {
         unsafe {
-            let br = LLVMBuildCondBr(self.builder, 
-                                     self.stack.pop().unwrap(),
-                                     self.labels[&then_label],
-                                     self.labels[&else_label]);
+            let br = LLVMBuildCondBr(
+                self.builder,
+                self.stack.pop().unwrap(),
+                self.labels[&then_label],
+                self.labels[&else_label],
+            );
             self.stack.push(br);
         }
     }
@@ -268,7 +332,6 @@ impl<'g> Generator<'g> {
 
             let module_string = CString::new(llvm_ir.to_bytes()).unwrap();
 
-
             LLVMDisposeMessage(llvm_ir_ptr);
 
             module_string
@@ -277,7 +340,9 @@ impl<'g> Generator<'g> {
 
     pub fn dump_to_file(&mut self, file: &str) -> bool {
         unsafe {
-            let mut error_msg: *mut i8 = "".as_bytes().iter()
+            let mut error_msg: *mut i8 = ""
+                .as_bytes()
+                .iter()
                 .map(|b| *b as i8)
                 .collect::<Vec<_>>()
                 .as_mut_ptr();
@@ -302,5 +367,3 @@ impl<'g> Drop for Generator<'g> {
         }
     }
 }
-
-

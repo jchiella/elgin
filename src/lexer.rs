@@ -18,7 +18,7 @@ pub enum Token {
 
     // operator
     Op(String),
-    
+
     // keywords
     Proc,
     If,
@@ -28,6 +28,7 @@ pub enum Token {
     Loop,
     Var,
     Const,
+    Return,
 
     // special characters
     LParen,
@@ -63,7 +64,11 @@ pub struct Span {
 
 impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{} @ line {}, from {}-{}", self.token, self.lineno, self.start, self.end)
+        write!(
+            f,
+            "{} @ line {}, from {}-{}",
+            self.token, self.lineno, self.start, self.end
+        )
     }
 }
 
@@ -84,7 +89,7 @@ impl<'l> Lexer<'l> {
             charno: 0,
             nesting: 0,
         }
-    } 
+    }
 
     fn peek(&self) -> char {
         if self.index >= self.code.len() {
@@ -103,7 +108,7 @@ impl<'l> Lexer<'l> {
             '\n' => {
                 self.lineno += 1;
                 self.charno = 0;
-            },
+            }
             _ => {
                 self.charno += 1;
             }
@@ -117,7 +122,7 @@ impl<'l> Lexer<'l> {
             ident.push(self.next());
         }
         ident
-    } 
+    }
 
     fn number(&mut self) -> Token {
         let mut number = String::new();
@@ -128,7 +133,7 @@ impl<'l> Lexer<'l> {
                 '.' => {
                     decimal_passed = true;
                     '.'
-                },
+                }
                 c => c,
             });
         }
@@ -138,7 +143,7 @@ impl<'l> Lexer<'l> {
             Token::IntLiteral(number)
         }
     }
-    
+
     fn operator(&mut self) -> Token {
         let mut op = String::new();
         while is_op(self.peek()) {
@@ -152,13 +157,15 @@ impl<'l> Lexer<'l> {
         self.next(); // skip "
         while self.peek() != '"' {
             if self.peek() == '\0' {
-                return Err(Error::EOF {lineno: self.lineno, charno: self.charno});
+                return Err(Error::EOF {
+                    lineno: self.lineno,
+                    charno: self.charno,
+                });
             }
             string.push(self.next());
         }
         self.next(); // skip "
         Ok(Token::StrLiteral(string))
-
     }
 
     fn special(&mut self) -> Token {
@@ -188,13 +195,23 @@ impl<'l> Lexer<'l> {
             match self.peek() {
                 ch if is_ident_start(ch) => {
                     let id = self.ident_str();
-                    tokens.push(self.spanned(str_to_keyword(&id)
-                        .unwrap_or_else(|| str_to_ident(&id))));
-                },
+                    tokens.push(
+                        self.spanned(str_to_keyword(&id).unwrap_or_else(|| str_to_ident(&id))),
+                    );
+                }
                 ch if is_number(ch, false) => {
                     let number = self.number();
                     tokens.push(self.spanned(number));
-                },
+                }
+                '=' => {
+                    if self.code[self.index + 1] == '=' {
+                        let operator = self.operator();
+                        tokens.push(self.spanned(operator));
+                    } else {
+                        let special = self.special();
+                        tokens.push(self.spanned(special));
+                    }
+                }
                 ch if is_special(ch) => {
                     let special = self.special();
                     tokens.push(self.spanned(special));
@@ -202,30 +219,39 @@ impl<'l> Lexer<'l> {
                 '"' => {
                     let string = self.string()?;
                     tokens.push(self.spanned(string));
-                },
+                }
                 ch if is_op(ch) => {
                     let operator = self.operator();
                     tokens.push(self.spanned(operator));
-                },
+                }
                 ch if ch == '\n' => {
                     // token::proc doesn't matter, just needs to be
                     // something that doesn't trigger newline suppression
                     if tokens.last().unwrap().token == Token::Newline {
                         self.next(); // skip consecutive newlines
                     } else {
-                        match tokens.last().unwrap_or(&Span {token: Token::Proc, lineno: 0, start: 0, end: 0}).token {
+                        match tokens
+                            .last()
+                            .unwrap_or(&Span {
+                                token: Token::Proc,
+                                lineno: 0,
+                                start: 0,
+                                end: 0,
+                            })
+                            .token
+                        {
                             Token::Op(_) | Token::Comma => self.next(),
                             _ if self.nesting != 0 => self.next(),
                             _ => {
                                 tokens.push(self.spanned(Token::Newline));
                                 self.next()
-                            },
+                            }
                         };
                     }
-                },
+                }
                 ch if ch.is_ascii_whitespace() => {
                     self.next();
-                },
+                }
                 '\0' => break,
                 _ => unreachable!(),
             }
@@ -237,7 +263,7 @@ impl<'l> Lexer<'l> {
         Span {
             token: token.clone(),
             lineno: self.lineno + 1,
-            start: 0,//self.charno - token_len(&token) + 1, 
+            start: 0, //self.charno - token_len(&token) + 1,
             end: self.charno + 1,
         }
     }
@@ -270,14 +296,15 @@ fn is_op(ch: char) -> bool {
 
 fn str_to_keyword(s: &str) -> Option<Token> {
     Some(match s {
-        "proc" => Token::Proc, 
-        "if" => Token::If, 
+        "proc" => Token::Proc,
+        "if" => Token::If,
         "else" => Token::Else,
         "elif" => Token::Elif,
         "while" => Token::While,
         "loop" => Token::Loop,
         "var" => Token::Var,
         "const" => Token::Const,
+        "return" => Token::Return,
         _ => return None,
     })
 }
@@ -304,16 +331,17 @@ fn token_len(t: &Token) -> usize {
         Token::Loop => 4,
         Token::Var => 3,
         Token::Const => 5,
+        Token::Return => 6,
 
-        Token::LParen 
-            | Token::RParen 
-            | Token::LBracket 
-            | Token::RBracket 
-            | Token::LBrace 
-            | Token::RBrace 
-            | Token::Comma 
-            | Token::Equals 
-            | Token::Colon => 1,
+        Token::LParen
+        | Token::RParen
+        | Token::LBracket
+        | Token::RBracket
+        | Token::LBrace
+        | Token::RBrace
+        | Token::Comma
+        | Token::Equals
+        | Token::Colon => 1,
 
         // newline
         Token::Newline => 1,
