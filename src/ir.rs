@@ -134,7 +134,8 @@ impl<'i> IRBuilder<'i> {
         Ok(vec![
             Instruction {
                 ins: InstructionType::Push(value),
-                typ: IRType::Variable(self.next_type_var()),
+                //typ: IRType::Variable(self.next_type_var()),
+                typ: self.parse_to_ir_type(&typ),
                 lineno, start, end,
             }
         ])
@@ -259,7 +260,8 @@ impl<'i> IRBuilder<'i> {
                      lineno: usize, 
                      start: usize, 
                      end: usize) -> IRResult {
-        let ir_type = IRType::Variable(self.next_type_var());
+        //let ir_type = IRType::Variable(self.next_type_var());
+        let ir_type = self.parse_to_ir_type(&typ);
         self.scopes.last_mut().unwrap().insert(name.clone(), ir_type.clone());
         let mut res = self.node(&value)?;
         res.push(Instruction {
@@ -312,7 +314,8 @@ impl<'i> IRBuilder<'i> {
             }
             ins.push(Instruction {
                 ins: InstructionType::Return,
-                typ: IRType::Variable(self.next_type_var()),
+                //typ: IRType::Variable(self.next_type_var()),
+                typ: IRType::Undefined,
                 lineno, start, end,
             });
             Ok(IRProc {

@@ -42,7 +42,8 @@ impl<'i> IRBuilder<'i> {
                     let var_type = ins.typ.clone();
                     let scope_index = self.scopes.len() - 1;
                     self.scopes[scope_index].insert(var, var_type.clone());
-                    constraints.insert(var_type, content_type);
+                    //constraints.insert(var_type, content_type);
+                    add_constraint(&mut constraints, var_type, content_type);
                 },
 
                 Return => {
@@ -56,9 +57,12 @@ impl<'i> IRBuilder<'i> {
                 Add => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
-                    constraints.insert(t1.clone(), t2.clone());
-                    constraints.insert(t1.clone(), ins.typ.clone());
-                    constraints.insert(t2.clone(), ins.typ.clone());
+                    //constraints.insert(t1.clone(), t2.clone());
+                    add_constraint(&mut constraints, t1.clone(), t2.clone());
+                    //constraints.insert(t1.clone(), ins.typ.clone());
+                    add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
+                    //constraints.insert(t2.clone(), ins.typ.clone());
+                    add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
                 },
                 Subtract => (),
                 Multiply => (),
@@ -72,13 +76,17 @@ impl<'i> IRBuilder<'i> {
         for (t1, t2) in constraints {
             println!("{:?} == {:?}", t1, t2);
         }
+        println!("------------------------");
         let mut new_body = proc.body.clone();
         let mut new_constraints = constraints.clone();
 
-        for (t1, t2) in constraints {
-            // set t1 == t2
-            new_body = substitute_proc_body(new_body, t1, t2); // replace in the proc
-            new_constraints = substitute_constraints(&new_constraints, t1, t2); // replace in the rules
+        //while new_constraints.len() > 0 {
+        for _ in 1..4 {
+            for (t1, t2) in constraints {
+                // set t1 == t2
+                new_body = substitute_proc_body(new_body, t1, t2); // replace in the proc
+                new_constraints = substitute_constraints(&new_constraints, t1, t2); // replace in the rules
+            }
         }
 
         Ok(dbg!(IRProc {
@@ -98,8 +106,11 @@ fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec
     for ins in body {
         new_body.push(Instruction {
             ins: ins.ins,
-            typ: if ins.typ == *t1 {
+            typ: if ins.typ.clone() == t1.clone() {
+                println!("{:?} => {:?}", t1.clone(), t2.clone());
                 t2.clone()
+            //} else if ins.typ.clone() == t2.clone() {
+            //    t1.clone()
             } else {
                 ins.typ
             },
@@ -116,6 +127,9 @@ fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -
     let mut new_constraints = HashMap::new();
 
     for (left, right) in constraints {
+        if left == right {
+            continue;
+        }
         let new_left = if *left == *t1 {
             t2.clone()
         } else {
@@ -133,3 +147,13 @@ fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -
 
     new_constraints
 }
+
+
+fn add_constraint(constraints: &mut Constraints, t1: IRType, t2: IRType) {
+    if let IRType::Variable(_) = t2 {
+        constraints.insert(t2, t1);
+    } else {
+        constraints.insert(t1, t2);
+    }
+}
+

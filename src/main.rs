@@ -47,15 +47,15 @@ fn file() {
     println!("analysis output:");
     irbuilder.analyze().unwrap();
     
-    //let mut generator = llvm::Generator::new(&unwrapped, "chi", &env::args().nth(1).unwrap());
-    //generator.go();
-    //println!("______________________");
-    //println!("codegen output:");
-    //println!("{:#?}", generator.to_cstring());
+    let mut generator = llvm::Generator::new(&irbuilder.procs, "chi", &env::args().nth(1).unwrap());
+    generator.go();
+    println!("______________________");
+    println!("codegen output:");
+    println!("{:#?}", generator.to_cstring());
 
-    //println!("Dumping to file...");
-    //let mut file_name = env::args().nth(1).unwrap();
-    //file_name.push_str(".ll");
-    //generator.dump_to_file(&file_name);
-    //println!("File done!");
+    println!("Dumping to file...");
+    let mut file_name = env::args().nth(1).unwrap();
+    file_name.push_str(".ll");
+    generator.dump_to_file(&file_name);
+    println!("File done!");
 }
