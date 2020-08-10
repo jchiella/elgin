@@ -26,6 +26,7 @@ pub struct Generator<'g> {
     stack: Vec<LLVMValueRef>,
     lookup: HashMap<String, LLVMValueRef>,
     labels: HashMap<usize, LLVMBasicBlockRef>,
+    llvm_procs: HashMap<String, LLVMValueRef>,
 
     current_proc: LLVMValueRef,
 }
@@ -57,6 +58,7 @@ impl<'g> Generator<'g> {
             stack: vec![],
             lookup: HashMap::new(),
             labels: HashMap::new(),
+            llvm_procs: HashMap::new(),
 
             current_proc: 0 as LLVMValueRef,
         }
@@ -64,16 +66,24 @@ impl<'g> Generator<'g> {
 
     pub fn go(&mut self) {
         self.build_header();
+        // Create declarations first
         for proc in self.procs {
             unsafe {
                 let mut llvm_arg_types: Vec<_> =
                     proc.arg_types.iter().map(|t| self.llvm_type(&t)).collect();
                 let proc_type = LLVMFunctionType(
-                    LLVMVoidTypeInContext(self.context),
+                    self.llvm_type(&proc.ret_type),
                     llvm_arg_types.as_mut_ptr(),
+                    llvm_arg_types.len() as u32,
                     0,
-                    0,
-                );
+                    );
+                let this_proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
+                self.llvm_procs.insert(proc.name.clone(), this_proc);
+            }
+        }
+        // Then evaluate bodies
+        for proc in self.procs {
+            unsafe {
                 for ins in &proc.body {
                     // index labels before starting
                     if let InstructionType::Label(label) = ins.ins {
@@ -84,13 +94,17 @@ impl<'g> Generator<'g> {
                     }
                 }
 
-                self.current_proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
+                self.current_proc = self.llvm_procs[&proc.name];
                 let bb = LLVMAppendBasicBlockInContext(
                     self.context,
                     self.current_proc,
                     self.cstr("entry"),
                 );
                 LLVMPositionBuilderAtEnd(self.builder, bb);
+                for (i, name) in proc.arg_names.iter().enumerate() {
+                    self.stack.push(dbg!(LLVMGetParam(self.current_proc, 1 as u32)));
+                    self.allocate(name.clone(), proc.arg_types[i].clone());
+                }
             }
             for ins in &proc.body {
                 self.ins(&ins.clone());
@@ -166,13 +180,16 @@ impl<'g> Generator<'g> {
                 | IRType::Primitive(Type::F128) => {
                     LLVMConstReal(self.llvm_type(&typ), s.parse().unwrap())
                 }
+                IRType::Undefined => {
+                    LLVMConstInt(self.llvm_type(&IRType::Primitive(Type::I64)), 0xffff, 0) // super temporary
+                }
                 t => todo!("{:?}", t),
             })
         }
     }
 
     fn load(&mut self, s: String, typ: IRType) {
-        let var = self.lookup.get(&s).unwrap();
+        let var = self.lookup.get(&dbg!(s)).unwrap();
         unsafe {
             let ld = LLVMBuildLoad2(
                 self.builder,
@@ -189,15 +206,20 @@ impl<'g> Generator<'g> {
             let name = self.cstr(&s);
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
             self.lookup.insert(s.clone(), alloca);
-        }
-        let var = self.lookup.get(&s).unwrap();
-        unsafe {
-            LLVMBuildStore(self.builder, self.stack.pop().unwrap(), *var);
+            //LLVMBuildStore(self.builder, dbg!(self.stack.pop().unwrap()), alloca);
         }
     }
 
     fn call(&mut self, proc_name: String) {
-        todo!()
+        unsafe {
+            let proc = self.llvm_procs[&proc_name];
+            let mut args = vec![];
+            let arg_count = LLVMCountParams(proc);
+            for _ in 0..arg_count {
+                args.push(self.stack.pop().unwrap());
+            }
+            LLVMBuildCall(self.builder, proc, args.as_mut_ptr(), args.len() as u32, self.cstr("tmpcall"));
+        }
     }
 
     fn return_(&mut self, typ: IRType) {
@@ -320,6 +342,8 @@ impl<'g> Generator<'g> {
                 IRType::Primitive(Type::F128) => LLVMFloatTypeInContext(self.context),
 
                 IRType::Primitive(Type::Bool) => LLVMInt1TypeInContext(self.context),
+
+                IRType::Undefined => LLVMVoidTypeInContext(self.context),
                 _ => unreachable!(),
             }
         }
