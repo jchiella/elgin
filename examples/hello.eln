@@ -1,6 +1,9 @@
 proc main() {
     var x = 10
     var y = 12.3
-    x + 1
-    y + 2.4
+    if x < 100 {
+        y
+    } else {
+        x
+    }
 }

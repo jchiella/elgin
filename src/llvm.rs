@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::errors::Error;
 use crate::parser::Type;
-use crate::ir::{Instruction, IRProc, IRType};
+use crate::ir::{Instruction, InstructionType, IRProc, IRType, CompareType};
 
 type GenResult = Result<LLVMValueRef, Error>;
 
@@ -25,6 +25,9 @@ pub struct Generator<'g> {
 
     stack: Vec<LLVMValueRef>,
     lookup: HashMap<String, LLVMValueRef>,
+    labels: HashMap<usize, LLVMBasicBlockRef>,
+
+    current_proc: LLVMValueRef,
 }
 
 impl<'g> Generator<'g> {
@@ -44,8 +47,10 @@ impl<'g> Generator<'g> {
             strings: vec![],
 
             stack: vec![],
-
             lookup: HashMap::new(),
+            labels: HashMap::new(),
+
+            current_proc: 0 as LLVMValueRef,
         }
     }
 
@@ -55,8 +60,17 @@ impl<'g> Generator<'g> {
             unsafe {
                 let mut llvm_arg_types: Vec<_> = proc.arg_types.iter().map(|t| self.llvm_type(&t)).collect();
                 let proc_type = LLVMFunctionType(LLVMVoidTypeInContext(self.context), llvm_arg_types.as_mut_ptr(), 0, 0);
-                let proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
-                let bb = LLVMAppendBasicBlockInContext(self.context, proc, self.cstr("entry"));
+                for ins in &proc.body {
+                    if let InstructionType::Label(label) = ins.ins {
+                        let mut lbl = "lbl".to_string();
+                        lbl.push_str(&label.to_string());
+                        let bb = LLVMCreateBasicBlockInContext(self.context, self.cstr(&lbl));
+                        self.labels.insert(label, bb);
+                    }
+                }
+
+                self.current_proc = LLVMAddFunction(self.module, self.cstr(&proc.name), proc_type);
+                let bb = LLVMAppendBasicBlockInContext(self.context, self.current_proc, self.cstr("entry"));
                 LLVMPositionBuilderAtEnd(self.builder, bb);
             }
             for ins in &proc.body {
@@ -85,12 +99,18 @@ impl<'g> Generator<'g> {
             Load(s) => self.load(s, typ),
             Allocate(s) => self.allocate(s, typ),
 
+            Branch(b, e) => self.branch(b, e),
+            Jump(l) => self.jump(l),
+            Label(l) => self.label(l),
+
             Return => self.return_(typ),
 
             Negate => self.negate(typ),
             Add => self.add(typ),
             Subtract => self.subtract(typ),
             Multiply => self.multiply(typ),
+
+            Compare(m) => self.compare(m, typ),
         }
     }
 
@@ -170,6 +190,49 @@ impl<'g> Generator<'g> {
         unsafe {
             let mul = LLVMBuildMul(self.builder, self.stack.pop().unwrap(), self.stack.pop().unwrap(), self.cstr("tmpmul"));
             self.stack.push(mul);
+        }
+    }
+
+    fn compare(&mut self, comptype: CompareType, typ: IRType) {
+        unsafe {
+            use llvm::LLVMIntPredicate::*;
+            let cmp = LLVMBuildICmp(self.builder,
+                                    match comptype {
+                                        CompareType::EQ => LLVMIntEQ,
+                                        CompareType::NE => LLVMIntNE,
+                                        CompareType::LT => LLVMIntSLT,
+                                        CompareType::GT => LLVMIntSGT,
+                                        CompareType::LE => LLVMIntSLE,
+                                        CompareType::GE => LLVMIntSGE,
+                                    },
+                                    self.stack.pop().unwrap(),
+                                    self.stack.pop().unwrap(),
+                                    self.cstr("tmpcmp"));
+            self.stack.push(cmp);
+        }
+    }
+
+    fn branch(&mut self, then_label: usize, else_label: usize) {
+        unsafe {
+            let br = LLVMBuildCondBr(self.builder, 
+                                     self.stack.pop().unwrap(),
+                                     self.labels[&then_label],
+                                     self.labels[&else_label]);
+            self.stack.push(br);
+        }
+    }
+
+    fn jump(&mut self, label: usize) {
+        unsafe {
+            let jmp = LLVMBuildBr(self.builder, self.labels[&label]);
+            self.stack.push(jmp);
+        }
+    }
+
+    fn label(&mut self, label: usize) {
+        unsafe {
+            LLVMAppendExistingBasicBlock(self.current_proc, self.labels[&label]);
+            LLVMPositionBuilderAtEnd(self.builder, self.labels[&label]);
         }
     }
 

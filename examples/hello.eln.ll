@@ -11,8 +11,17 @@ entry:
   %y = alloca float
   store float 0x40289999A0000000, float* %y
   %tmpload = load i64, i64* %x
-  %tmpadd = add i64 1, %tmpload
+  %tmpcmp = icmp slt i64 100, %tmpload
+  br i1 %tmpcmp, label %lbl0, label %lbl1
+
+lbl0:                                             ; preds = %entry
   %tmpload1 = load float, float* %y
-  %tmpadd2 = add float 0x4003333340000000, %tmpload1
+  br label %lbl2
+
+lbl1:                                             ; preds = %entry
+  %tmpload2 = load i64, i64* %x
+  br label %lbl2
+
+lbl2:                                             ; preds = %lbl1, %lbl0
   ret void
 }

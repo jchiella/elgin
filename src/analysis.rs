@@ -1,6 +1,7 @@
 //! The static analysis component of Elgin
 //! Does fun stuff like type inference 
 
+use crate::parser::Type;
 use crate::ir::*;
 use crate::errors::Error;
 
@@ -46,6 +47,12 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(&mut constraints, var_type, content_type);
                 },
 
+                Branch(_, _) => {
+                    add_constraint(&mut constraints, stack.pop().unwrap(), IRType::Primitive(Type::Bool));
+                },
+                Jump(_) => (),
+                Label(_) => (),
+
                 Return => {
                     //let type_to_return = stack.pop().unwrap();
                     //let ret_type = ins.typ.clone();
@@ -57,15 +64,19 @@ impl<'i> IRBuilder<'i> {
                 Add => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
-                    //constraints.insert(t1.clone(), t2.clone());
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
-                    //constraints.insert(t1.clone(), ins.typ.clone());
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
-                    //constraints.insert(t2.clone(), ins.typ.clone());
                     add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
                 },
                 Subtract => (),
                 Multiply => (),
+
+                Compare(_) => {
+                    let t1 = stack.pop().unwrap();
+                    let t2 = stack.pop().unwrap();
+                    add_constraint(&mut constraints, t1.clone(), t2.clone());
+                    stack.push(IRType::Primitive(Type::Bool));
+                },
             };
         }
         Ok(constraints)

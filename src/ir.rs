@@ -15,6 +15,7 @@ type Scope = HashMap<String, IRType>;
 pub struct IRBuilder<'i> {
     ast: &'i [Node],
     pub available_type_var: usize,
+    available_label_id: usize,
     pub scopes: Vec<Scope>,
     pub procs: Vec<IRProc>,
 }
@@ -28,10 +29,20 @@ pub struct IRProc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CompareType {
+    EQ, NE, GT, LT, GE, LE,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstructionType {
     Push(String), // pushes an immediate value to the stack
     Load(String), // pushes a variable's contents to the stack
     Allocate(String), // creates a new local variable and gives it the top value of the stack
+
+    Branch(usize, usize), // conditional branch with if body and else body
+    Jump(usize), // unconditional jump
+
+    Label(usize), // location for jumps and branches
 
     Return,
 
@@ -39,6 +50,8 @@ pub enum InstructionType {
     Add,
     Subtract,
     Multiply,
+
+    Compare(CompareType),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -84,6 +97,7 @@ impl<'i> IRBuilder<'i> {
         IRBuilder {
             ast,
             available_type_var: 0,
+            available_label_id: 0,
             scopes: vec![],
             procs: vec![],
         }
@@ -166,6 +180,13 @@ impl<'i> IRBuilder<'i> {
                 "+" => InstructionType::Add,
                 "-" => InstructionType::Subtract,
                 "*" => InstructionType::Multiply,
+
+                "==" => InstructionType::Compare(CompareType::EQ),
+                "!=" => InstructionType::Compare(CompareType::NE),
+                ">" => InstructionType::Compare(CompareType::GT),
+                "<" => InstructionType::Compare(CompareType::LT),
+                ">=" => InstructionType::Compare(CompareType::GE),
+                "<=" => InstructionType::Compare(CompareType::LE),
                 _ => todo!(),
             },
             typ: IRType::Variable(self.next_type_var()),
@@ -233,7 +254,45 @@ impl<'i> IRBuilder<'i> {
                     lineno: usize, 
                     start: usize, 
                     end: usize) -> IRResult {
-        todo!()
+        let mut res = vec![];
+        let body_label = self.next_label_id();
+        let else_label = self.next_label_id();
+        let end_label = self.next_label_id();
+
+        res.append(&mut self.node(&condition)?);
+        res.push(Instruction {
+            ins: InstructionType::Branch(body_label, else_label),
+            typ: IRType::NoReturn,
+            lineno, start, end,
+        });
+        res.push(Instruction {
+            ins: InstructionType::Label(body_label),
+            typ: IRType::Undefined,
+            lineno, start, end,
+        });
+        res.append(&mut self.node(&body)?);
+        res.push(Instruction {
+            ins: InstructionType::Jump(end_label),
+            typ: IRType::Undefined,
+            lineno, start, end,
+        });
+        res.push(Instruction {
+            ins: InstructionType::Label(else_label),
+            typ: IRType::Undefined,
+            lineno, start, end,
+        });
+        res.append(&mut self.node(&else_body)?);
+        res.push(Instruction {
+            ins: InstructionType::Jump(end_label),
+            typ: IRType::Undefined,
+            lineno, start, end,
+        });
+        res.push(Instruction {
+            ins: InstructionType::Label(end_label),
+            typ: IRType::Undefined,
+            lineno, start, end,
+        });
+        Ok(res)
     }
 
     fn while_statement(&mut self, 
@@ -250,7 +309,11 @@ impl<'i> IRBuilder<'i> {
              lineno: usize, 
              start: usize, 
              end: usize) -> IRResult {
-        todo!()
+        let mut res = vec![];
+        for node in nodes {
+            res.append(&mut self.node(&node)?);
+        }
+        Ok(res)
     }
 
     fn var_statement(&mut self, 
@@ -345,6 +408,11 @@ impl<'i> IRBuilder<'i> {
     fn next_type_var(&mut self) -> usize {
         self.available_type_var += 1;
         self.available_type_var - 1
+    }
+
+    fn next_label_id(&mut self) -> usize {
+        self.available_label_id += 1;
+        self.available_label_id - 1
     }
 
     pub fn locate_var(&self, name: &String) -> Result<IRType, Error> {
