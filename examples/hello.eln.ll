@@ -7,18 +7,21 @@ declare i32 @printf(i8*, ...)
 define i64 @fun_stuff(i64 %0) {
 entry:
   %n = alloca i64
+  store i64 %0, i64* %n
   %tmpload = load i64, i64* %n
-  ret void
+  ret i64 %tmpload
 }
 
 define void @main() {
 entry:
   %x = alloca i64
+  store i64 10, i64* %x
   %y = alloca float
+  store float 0x4059066660000000, float* %y
   %tmpload = load i64, i64* %x
   %tmpcall = call i64 @fun_stuff(i64 %tmpload)
   %tmpload1 = load i64, i64* %x
-  %tmpcmp = icmp eq i64 %tmpload1, float 0x4059066660000000
+  %tmpcmp = icmp eq i64 %tmpload1, %tmpcall
   br i1 %tmpcmp, label %lbl0, label %lbl1
 
 lbl0:                                             ; preds = %entry

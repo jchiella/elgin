@@ -509,7 +509,7 @@ impl<'i> IRBuilder<'i> {
         res.push(
             Instruction {
                 ins: InstructionType::Return,
-                typ: IRType::Undefined, // for now
+                typ: res.last().unwrap().clone().typ,
                 lineno, start, end,
             }
         );

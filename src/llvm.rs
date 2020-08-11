@@ -8,11 +8,8 @@ use llvm::prelude::*;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 
-use crate::errors::Error;
 use crate::ir::{CompareType, IRProc, IRType, Instruction, InstructionType};
 use crate::parser::Type;
-
-type GenResult = Result<LLVMValueRef, Error>;
 
 pub struct Generator<'g> {
     procs: &'g [IRProc],
@@ -102,7 +99,7 @@ impl<'g> Generator<'g> {
                 );
                 LLVMPositionBuilderAtEnd(self.builder, bb);
                 for (i, name) in proc.arg_names.iter().enumerate() {
-                    self.stack.push(dbg!(LLVMGetParam(self.current_proc, 1 as u32)));
+                    self.stack.push(LLVMGetParam(self.current_proc, i as u32));
                     self.allocate(name.clone(), proc.arg_types[i].clone());
                 }
             }
@@ -189,7 +186,7 @@ impl<'g> Generator<'g> {
     }
 
     fn load(&mut self, s: String, typ: IRType) {
-        let var = self.lookup.get(&dbg!(s)).unwrap();
+        let var = self.lookup.get(&s).unwrap();
         unsafe {
             let ld = LLVMBuildLoad2(
                 self.builder,
@@ -206,7 +203,8 @@ impl<'g> Generator<'g> {
             let name = self.cstr(&s);
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
             self.lookup.insert(s.clone(), alloca);
-            //LLVMBuildStore(self.builder, dbg!(self.stack.pop().unwrap()), alloca);
+            let val = self.stack.pop().unwrap();
+            LLVMBuildStore(self.builder, val, alloca); // why does this segfault???????
         }
     }
 
@@ -218,16 +216,18 @@ impl<'g> Generator<'g> {
             for _ in 0..arg_count {
                 args.push(self.stack.pop().unwrap());
             }
-            LLVMBuildCall(self.builder, proc, args.as_mut_ptr(), args.len() as u32, self.cstr("tmpcall"));
+            let call = LLVMBuildCall(self.builder, proc, args.as_mut_ptr(), args.len() as u32, self.cstr("tmpcall"));
+            self.stack.push(call); 
         }
     }
 
     fn return_(&mut self, typ: IRType) {
         unsafe {
-            if let IRType::Undefined = typ {
+            if let IRType::Undefined = dbg!(typ) {
+                dbg!("Void");
                 LLVMBuildRetVoid(self.builder);
             } else {
-                LLVMBuildRet(self.builder, self.stack.pop().unwrap());
+                LLVMBuildRet(self.builder, dbg!(self.stack.pop().unwrap()));
             }
         }
     }
@@ -278,6 +278,7 @@ impl<'g> Generator<'g> {
     fn compare(&mut self, comptype: CompareType, typ: IRType) {
         unsafe {
             use llvm::LLVMIntPredicate::*;
+            dbg!(self.stack.clone());
             let cmp = LLVMBuildICmp(
                 self.builder,
                 match comptype {
