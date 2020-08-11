@@ -62,7 +62,7 @@ impl<'g> Generator<'g> {
     }
 
     pub fn go(&mut self) {
-        self.build_header();
+        //self.build_header();
         // Create declarations first
         for proc in self.procs {
             unsafe {
@@ -89,6 +89,10 @@ impl<'g> Generator<'g> {
                         let bb = LLVMCreateBasicBlockInContext(self.context, self.cstr(&lbl));
                         self.labels.insert(label, bb);
                     }
+                }
+
+                if proc.body.len() == 0 { // this is a declaration, not a definition
+                    continue 
                 }
 
                 self.current_proc = self.llvm_procs[&proc.name];
@@ -157,7 +161,7 @@ impl<'g> Generator<'g> {
 
     fn push(&mut self, s: String, typ: IRType) {
         unsafe {
-            self.stack.push(match typ {
+            let obj = match typ {
                 IRType::Primitive(Type::I8)
                 | IRType::Primitive(Type::I16)
                 | IRType::Primitive(Type::I32)
@@ -180,8 +184,12 @@ impl<'g> Generator<'g> {
                 IRType::Undefined => {
                     LLVMConstInt(self.llvm_type(&IRType::Primitive(Type::I64)), 0xffff, 0) // super temporary
                 }
+                IRType::Primitive(Type::Str) => {
+                    LLVMBuildGlobalStringPtr(self.builder, self.cstr(&s), self.cstr("tmpstr"))
+                }
                 t => todo!("{:?}", t),
-            })
+            };
+            self.stack.push(obj);
         }
     }
 
@@ -204,7 +212,7 @@ impl<'g> Generator<'g> {
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
             self.lookup.insert(s.clone(), alloca);
             let val = self.stack.pop().unwrap();
-            LLVMBuildStore(self.builder, val, alloca); // why does this segfault???????
+            LLVMBuildStore(self.builder, val, alloca);
         }
     }
 
@@ -343,6 +351,7 @@ impl<'g> Generator<'g> {
                 IRType::Primitive(Type::F128) => LLVMFloatTypeInContext(self.context),
 
                 IRType::Primitive(Type::Bool) => LLVMInt1TypeInContext(self.context),
+                IRType::Primitive(Type::Str) => LLVMPointerType(LLVMInt8TypeInContext(self.context), 0),
 
                 IRType::Undefined => LLVMVoidTypeInContext(self.context),
                 _ => unreachable!(),

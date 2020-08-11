@@ -109,6 +109,7 @@ impl<'i> IRBuilder<'i> {
     }
 
     pub fn go(&mut self) -> Result<&Vec<IRProc>, Error> {
+        self.build_header();
         for node in self.ast {
             match node.clone() {
                 Node::ConstStatement {
@@ -140,6 +141,17 @@ impl<'i> IRBuilder<'i> {
             }
         }
         Ok(&self.procs)
+    }
+
+    fn build_header(&mut self) {
+        // todo put debugging function headers here...
+        self.procs.push(IRProc {
+            name: "puts".to_owned(),
+            arg_types: vec![IRType::Primitive(Type::Str)],
+            arg_names: vec!["s".to_owned()],
+            ret_type: IRType::Primitive(Type::I32),
+            body: vec![],
+        });
     }
 
     fn node(&mut self, node: &Node) -> IRResult {
@@ -551,10 +563,10 @@ impl<'i> IRBuilder<'i> {
             scope.insert(arg.clone(), t);
         }
         if let Node::Block { nodes, .. } = *body {
-            for node in nodes {
+            for node in &nodes {
                 ins.append(&mut self.node(&node)?);
             }
-            if ret_type == Type::Undefined {
+            if ret_type == Type::Undefined && nodes.len() > 0 {
                 ins.push(Instruction {
                     ins: InstructionType::Push("undefined".to_owned()),
                     typ: IRType::Undefined,
@@ -590,7 +602,7 @@ impl<'i> IRBuilder<'i> {
         match t.clone() {
             ConstInt => IRType::Primitive(Type::I64),
             ConstFloat => IRType::Primitive(Type::F64),
-            ConstStr => todo!(),
+            ConstStr => IRType::Primitive(Type::Str),
 
             Undefined => IRType::Undefined,
             Unknown => IRType::Variable(self.next_type_var()),

@@ -458,7 +458,15 @@ impl<'p> Parser<'p> {
         } else {
             ret_type = Type::Undefined;
         }
-        let body = self.block()?;
+        let body;
+        if self.peek().token == Token::LBrace {
+            body = self.block()?;
+        } else {
+            body = Node::Block {
+                nodes: vec![],
+                lineno: 0, start: 0, end: 0,
+            }
+        }
 
         Ok(Node::ProcStatement {
             name,
