@@ -1,3 +1,8 @@
+# The traditional "Hello World" example
+# puts will eventually be replaced by std.io.out.writeLn()
+
+#: This is the main proc, which is executed at the start
+#: of every program
 proc main(): i32 {
     puts("Hello world!")
     return 0
