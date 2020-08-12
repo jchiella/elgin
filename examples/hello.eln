@@ -1,3 +1,5 @@
-proc main() {
+proc main(): i32 {
+    var x = 10
     puts("Hello world!")
+    return x
 }
