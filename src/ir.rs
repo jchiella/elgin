@@ -10,22 +10,21 @@ use std::fmt;
 
 type IRResult = Result<Vec<Instruction>, Error>;
 
-type Scope = HashMap<String, IRType>;
+type Scope = HashMap<String, Type>;
 
 pub struct IRBuilder<'i> {
     ast: &'i [Node],
     pub available_type_var: usize,
     available_label_id: usize,
     pub scopes: Vec<Scope>,
-    pub procs: Vec<IRProc>,
-}
+    pub procs: Vec<IRProc>, }
 
 #[derive(Debug, Clone)]
 pub struct IRProc {
     pub name: String,
-    pub arg_names: Vec<String>,
-    pub arg_types: Vec<IRType>,
-    pub ret_type: IRType,
+    pub args: Vec<String>,
+    pub arg_types: Vec<Type>,
+    pub ret_type: Type,
     pub body: Vec<Instruction>,
 }
 
@@ -61,31 +60,11 @@ pub enum InstructionType {
     Compare(CompareType),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum IRType {
-    Primitive(Type),
-    Variable(usize),
-
-    Undefined,
-    NoReturn,
-}
-
-impl fmt::Debug for IRType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            IRType::Primitive(t) => write!(f, "{:?}", t),
-            IRType::Variable(n) => write!(f, "${}", n),
-            IRType::Undefined => write!(f, "Undefined"),
-            IRType::NoReturn => write!(f, "NoReturn"),
-        }?;
-        Ok(())
-    }
-}
 
 #[derive(Clone)]
 pub struct Instruction {
     pub ins: InstructionType,
-    pub typ: IRType,
+    pub typ: Type,
     pub lineno: usize,
     pub start: usize,
     pub end: usize,
@@ -110,6 +89,7 @@ impl<'i> IRBuilder<'i> {
 
     pub fn go(&mut self) -> Result<&Vec<IRProc>, Error> {
         self.build_header();
+        // just declare all functions + constants
         for node in self.ast {
             match node.clone() {
                 Node::ConstStatement {
@@ -127,6 +107,37 @@ impl<'i> IRBuilder<'i> {
                     args,
                     arg_types,
                     ret_type,
+                    ..
+                } => {
+                    self.procs.push(IRProc {
+                        name,
+                        args,
+                        arg_types,
+                        ret_type,
+                        body: vec![],
+                    });
+                }
+                n => return Err(Error::InvalidAtTopLevel { node: n }),
+            }
+        }
+        // then actually generate code
+        for node in self.ast {
+            match node.clone() {
+                Node::ConstStatement {
+                    name,
+                    typ,
+                    value,
+                    lineno,
+                    start,
+                    end,
+                } => {
+                    todo!()
+                }
+                Node::ProcStatement {
+                    name,
+                    args,
+                    arg_types,
+                    ret_type,
                     body,
                     lineno,
                     start,
@@ -135,7 +146,13 @@ impl<'i> IRBuilder<'i> {
                     let pstat = self.proc_statement(
                         name, args, arg_types, ret_type, body, lineno, start, end,
                     )?;
-                    self.procs.push(pstat);
+                    // FIXME this is a temporary workaround (procs should really be a hashmap)
+                    for (i, proc) in self.procs.iter().enumerate() {
+                        if proc.name == pstat.name {
+                            self.procs[i] = pstat;
+                            break;
+                        }
+                    }
                 }
                 n => return Err(Error::InvalidAtTopLevel { node: n }),
             }
@@ -144,12 +161,11 @@ impl<'i> IRBuilder<'i> {
     }
 
     fn build_header(&mut self) {
-        // todo put debugging function headers here...
         self.procs.push(IRProc {
             name: "puts".to_owned(),
-            arg_types: vec![IRType::Primitive(Type::Str)],
-            arg_names: vec!["s".to_owned()],
-            ret_type: IRType::Primitive(Type::I32),
+            args: vec!["s".to_owned()],
+            arg_types: vec![Type::Ptr(Box::new(Type::I8))],
+            ret_type: Type::I32,
             body: vec![],
         });
     }
@@ -270,8 +286,7 @@ impl<'i> IRBuilder<'i> {
     ) -> IRResult {
         Ok(vec![Instruction {
             ins: InstructionType::Push(value),
-            //typ: IRType::Variable(self.next_type_var()),
-            typ: self.parse_to_ir_type(&typ),
+            typ,
             lineno,
             start,
             end,
@@ -328,7 +343,7 @@ impl<'i> IRBuilder<'i> {
                 "<=" => InstructionType::Compare(CompareType::LE),
                 _ => todo!(),
             },
-            typ: IRType::Variable(self.next_type_var()),
+            typ: Type::Variable(self.next_type_var()),
             lineno,
             start,
             end,
@@ -351,7 +366,7 @@ impl<'i> IRBuilder<'i> {
                 "-" => InstructionType::Negate,
                 _ => todo!(),
             },
-            typ: IRType::Variable(self.next_type_var()),
+            typ: Type::Variable(self.next_type_var()),
             lineno,
             start,
             end,
@@ -405,52 +420,61 @@ impl<'i> IRBuilder<'i> {
         let body_label = self.next_label_id();
         let else_label = self.next_label_id();
         let end_label = self.next_label_id();
+        let mut blocks_ending_in_return = 2;
 
         res.append(&mut self.node(&condition)?);
         res.push(Instruction {
             ins: InstructionType::Branch(body_label, else_label),
-            typ: IRType::NoReturn,
+            typ: Type::NoReturn,
             lineno,
             start,
             end,
         });
         res.push(Instruction {
             ins: InstructionType::Label(body_label),
-            typ: IRType::Undefined,
+            typ: Type::Undefined,
             lineno,
             start,
             end,
         });
         res.append(&mut self.node(&body)?);
-        res.push(Instruction {
-            ins: InstructionType::Jump(end_label),
-            typ: IRType::Undefined,
-            lineno,
-            start,
-            end,
-        });
+        if res.last().unwrap().ins != InstructionType::Return {
+            blocks_ending_in_return -= 1;
+            res.push(Instruction {
+                ins: InstructionType::Jump(end_label),
+                typ: Type::Undefined,
+                lineno,
+                start,
+                end,
+            });
+        }
         res.push(Instruction {
             ins: InstructionType::Label(else_label),
-            typ: IRType::Undefined,
+            typ: Type::Undefined,
             lineno,
             start,
             end,
         });
         res.append(&mut self.node(&else_body)?);
-        res.push(Instruction {
-            ins: InstructionType::Jump(end_label),
-            typ: IRType::Undefined,
-            lineno,
-            start,
-            end,
-        });
-        res.push(Instruction {
-            ins: InstructionType::Label(end_label),
-            typ: IRType::Undefined,
-            lineno,
-            start,
-            end,
-        });
+        if res.last().unwrap().ins != InstructionType::Return {
+            blocks_ending_in_return -= 1;
+            res.push(Instruction {
+                ins: InstructionType::Jump(end_label),
+                typ: Type::Undefined,
+                lineno,
+                start,
+                end,
+            });
+        }
+        if blocks_ending_in_return < 2 {
+            res.push(Instruction {
+                ins: InstructionType::Label(end_label),
+                typ: Type::Undefined,
+                lineno,
+                start,
+                end,
+            });
+        }
         Ok(res)
     }
 
@@ -482,16 +506,14 @@ impl<'i> IRBuilder<'i> {
         start: usize,
         end: usize,
     ) -> IRResult {
-        //let ir_type = IRType::Variable(self.next_type_var());
-        let ir_type = self.parse_to_ir_type(&typ);
         self.scopes
             .last_mut()
             .unwrap()
-            .insert(name.clone(), ir_type.clone());
+            .insert(name.clone(), typ.clone());
         let mut res = self.node(&value)?;
         res.push(Instruction {
             ins: InstructionType::Allocate(name.clone()),
-            typ: ir_type,
+            typ,
             lineno,
             start,
             end,
@@ -553,13 +575,9 @@ impl<'i> IRBuilder<'i> {
     ) -> Result<IRProc, Error> {
         let mut ins = vec![];
         self.scopes.push(HashMap::new());
-        let ir_arg_types: Vec<_> = arg_types
-            .iter()
-            .map(|t| self.parse_to_ir_type(&t))
-            .collect();
         let scope = self.scopes.last_mut().unwrap();
         for (i, arg) in args.iter().enumerate() {
-            let t = ir_arg_types[i].clone();
+            let t = arg_types[i].clone();
             scope.insert(arg.clone(), t);
         }
         if let Node::Block { nodes, .. } = *body {
@@ -569,14 +587,14 @@ impl<'i> IRBuilder<'i> {
             if ret_type == Type::Undefined && nodes.len() > 0 {
                 ins.push(Instruction {
                     ins: InstructionType::Push("undefined".to_owned()),
-                    typ: IRType::Undefined,
+                    typ: Type::Undefined,
                     lineno,
                     start,
                     end,
                 });
                 ins.push(Instruction {
                     ins: InstructionType::Return,
-                    typ: IRType::Undefined,
+                    typ: Type::Undefined,
                     lineno,
                     start,
                     end,
@@ -584,12 +602,9 @@ impl<'i> IRBuilder<'i> {
             }
             Ok(IRProc {
                 name,
-                arg_names: args,
-                arg_types: arg_types
-                    .iter()
-                    .map(|t| self.parse_to_ir_type(&t))
-                    .collect(),
-                ret_type: self.parse_to_ir_type(&ret_type),
+                args,
+                arg_types,
+                ret_type,
                 body: ins,
             })
         } else {
@@ -597,20 +612,7 @@ impl<'i> IRBuilder<'i> {
         }
     }
 
-    pub fn parse_to_ir_type(&mut self, t: &Type) -> IRType {
-        use Type::*;
-        match t.clone() {
-            ConstInt => IRType::Primitive(Type::I64),
-            ConstFloat => IRType::Primitive(Type::F64),
-            ConstStr => IRType::Primitive(Type::Str),
-
-            Undefined => IRType::Undefined,
-            Unknown => IRType::Variable(self.next_type_var()),
-            typ => IRType::Primitive(typ),
-        }
-    }
-
-    fn next_type_var(&mut self) -> usize {
+    pub fn next_type_var(&mut self) -> usize {
         self.available_type_var += 1;
         self.available_type_var - 1
     }
@@ -620,7 +622,7 @@ impl<'i> IRBuilder<'i> {
         self.available_label_id - 1
     }
 
-    pub fn locate_var(&self, name: &String) -> Result<IRType, Error> {
+    pub fn locate_var(&self, name: &String) -> Result<Type, Error> {
         let mut scope_index = self.scopes.len() - 1;
         while scope_index >= 0 {
             if let Some(typ) = self.scopes[scope_index].get(name) {

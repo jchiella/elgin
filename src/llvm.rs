@@ -8,7 +8,7 @@ use llvm::prelude::*;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 
-use crate::ir::{CompareType, IRProc, IRType, Instruction, InstructionType};
+use crate::ir::{CompareType, IRProc, Instruction, InstructionType};
 use crate::parser::Type;
 
 pub struct Generator<'g> {
@@ -102,7 +102,7 @@ impl<'g> Generator<'g> {
                     self.cstr("entry"),
                 );
                 LLVMPositionBuilderAtEnd(self.builder, bb);
-                for (i, name) in proc.arg_names.iter().enumerate() {
+                for (i, name) in proc.args.iter().enumerate() {
                     self.stack.push(LLVMGetParam(self.current_proc, i as u32));
                     self.allocate(name.clone(), proc.arg_types[i].clone());
                 }
@@ -159,32 +159,32 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn push(&mut self, s: String, typ: IRType) {
+    fn push(&mut self, s: String, typ: Type) {
         unsafe {
             let obj = match typ {
-                IRType::Primitive(Type::I8)
-                | IRType::Primitive(Type::I16)
-                | IRType::Primitive(Type::I32)
-                | IRType::Primitive(Type::I64)
-                | IRType::Primitive(Type::I128) => {
+                Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64
+                | Type::I128 => {
                     LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0)
                 }
-                IRType::Primitive(Type::N8)
-                | IRType::Primitive(Type::N16)
-                | IRType::Primitive(Type::N32)
-                | IRType::Primitive(Type::N64)
-                | IRType::Primitive(Type::N128) => {
+                Type::N8
+                | Type::N16
+                | Type::N32
+                | Type::N64
+                | Type::N128 => {
                     LLVMConstInt(self.llvm_type(&typ), s.parse().unwrap(), 0)
                 }
-                IRType::Primitive(Type::F32)
-                | IRType::Primitive(Type::F64)
-                | IRType::Primitive(Type::F128) => {
+                Type::F32
+                | Type::F64
+                | Type::F128 => {
                     LLVMConstReal(self.llvm_type(&typ), s.parse().unwrap())
                 }
-                IRType::Undefined => {
-                    LLVMConstInt(self.llvm_type(&IRType::Primitive(Type::I64)), 0xffff, 0) // super temporary
+                Type::Undefined => {
+                    LLVMConstInt(self.llvm_type(&Type::I64), 0xffff, 0) // super temporary
                 }
-                IRType::Primitive(Type::Str) => {
+                Type::StrLiteral => {
                     LLVMBuildGlobalStringPtr(self.builder, self.cstr(&s), self.cstr("tmpstr"))
                 }
                 t => todo!("{:?}", t),
@@ -193,7 +193,7 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn load(&mut self, s: String, typ: IRType) {
+    fn load(&mut self, s: String, typ: Type) {
         let var = self.lookup.get(&s).unwrap();
         unsafe {
             let ld = LLVMBuildLoad2(
@@ -206,7 +206,7 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn allocate(&mut self, s: String, typ: IRType) {
+    fn allocate(&mut self, s: String, typ: Type) {
         unsafe {
             let name = self.cstr(&s);
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
@@ -229,9 +229,9 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn return_(&mut self, typ: IRType) {
+    fn return_(&mut self, typ: Type) {
         unsafe {
-            if let IRType::Undefined = dbg!(typ) {
+            if let Type::Undefined = dbg!(typ) {
                 dbg!("Void");
                 LLVMBuildRetVoid(self.builder);
             } else {
@@ -240,14 +240,14 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn negate(&mut self, typ: IRType) {
+    fn negate(&mut self, typ: Type) {
         unsafe {
             let neg = LLVMBuildNeg(self.builder, self.stack.pop().unwrap(), self.cstr("tmpneg"));
             self.stack.push(neg);
         }
     }
 
-    fn add(&mut self, typ: IRType) {
+    fn add(&mut self, typ: Type) {
         unsafe {
             let add = LLVMBuildAdd(
                 self.builder,
@@ -259,19 +259,21 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn subtract(&mut self, typ: IRType) {
+    fn subtract(&mut self, typ: Type) {
         unsafe {
+            let v1 = self.stack.pop().unwrap();
+            let v2 = self.stack.pop().unwrap();
             let sub = LLVMBuildSub(
                 self.builder,
-                self.stack.pop().unwrap(),
-                self.stack.pop().unwrap(),
+                v2,
+                v1,
                 self.cstr("tmpsub"),
             );
             self.stack.push(sub);
         }
     }
 
-    fn multiply(&mut self, typ: IRType) {
+    fn multiply(&mut self, typ: Type) {
         unsafe {
             let mul = LLVMBuildMul(
                 self.builder,
@@ -283,7 +285,7 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn compare(&mut self, comptype: CompareType, typ: IRType) {
+    fn compare(&mut self, comptype: CompareType, typ: Type) {
         unsafe {
             use llvm::LLVMIntPredicate::*;
             dbg!(self.stack.clone());
@@ -331,29 +333,29 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn llvm_type(&self, t: &IRType) -> LLVMTypeRef {
+    fn llvm_type(&self, t: &Type) -> LLVMTypeRef {
         unsafe {
             match t {
-                IRType::Primitive(Type::I8) => LLVMInt8TypeInContext(self.context),
-                IRType::Primitive(Type::I16) => LLVMInt16TypeInContext(self.context),
-                IRType::Primitive(Type::I32) => LLVMInt32TypeInContext(self.context),
-                IRType::Primitive(Type::I64) => LLVMInt64TypeInContext(self.context),
-                IRType::Primitive(Type::I128) => LLVMInt128TypeInContext(self.context),
+                Type::I8 => LLVMInt8TypeInContext(self.context),
+                Type::I16 => LLVMInt16TypeInContext(self.context),
+                Type::I32 => LLVMInt32TypeInContext(self.context),
+                Type::I64 => LLVMInt64TypeInContext(self.context),
+                Type::I128 => LLVMInt128TypeInContext(self.context),
 
-                IRType::Primitive(Type::N8) => LLVMInt8TypeInContext(self.context),
-                IRType::Primitive(Type::N16) => LLVMInt16TypeInContext(self.context),
-                IRType::Primitive(Type::N32) => LLVMInt32TypeInContext(self.context),
-                IRType::Primitive(Type::N64) => LLVMInt64TypeInContext(self.context),
-                IRType::Primitive(Type::N128) => LLVMInt128TypeInContext(self.context),
+                Type::N8 => LLVMInt8TypeInContext(self.context),
+                Type::N16 => LLVMInt16TypeInContext(self.context),
+                Type::N32 => LLVMInt32TypeInContext(self.context),
+                Type::N64 => LLVMInt64TypeInContext(self.context),
+                Type::N128 => LLVMInt128TypeInContext(self.context),
 
-                IRType::Primitive(Type::F32) => LLVMFloatTypeInContext(self.context),
-                IRType::Primitive(Type::F64) => LLVMFloatTypeInContext(self.context),
-                IRType::Primitive(Type::F128) => LLVMFloatTypeInContext(self.context),
+                Type::F32 => LLVMFloatTypeInContext(self.context),
+                Type::F64 => LLVMFloatTypeInContext(self.context),
+                Type::F128 => LLVMFloatTypeInContext(self.context),
 
-                IRType::Primitive(Type::Bool) => LLVMInt1TypeInContext(self.context),
-                IRType::Primitive(Type::Str) => LLVMPointerType(LLVMInt8TypeInContext(self.context), 0),
+                Type::Bool => LLVMInt1TypeInContext(self.context),
 
-                IRType::Undefined => LLVMVoidTypeInContext(self.context),
+                Type::Ptr(t) => LLVMPointerType(self.llvm_type(&t), 0),
+                Type::Undefined => LLVMVoidTypeInContext(self.context),
                 _ => unreachable!(),
             }
         }

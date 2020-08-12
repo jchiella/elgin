@@ -7,7 +7,8 @@ use crate::parser::Type;
 
 use std::collections::HashMap;
 
-type Constraints = HashMap<IRType, IRType>;
+//type Constraints = HashMap<Type, Type>;
+type Constraints = Vec<(Type, Type)>;
 
 impl<'i> IRBuilder<'i> {
     pub fn analyze(&mut self) -> Result<(), Error> {
@@ -18,22 +19,23 @@ impl<'i> IRBuilder<'i> {
             self.scopes.push(HashMap::new());
             let scope = self.scopes.last_mut().unwrap();
             for (i, arg_type) in self.procs[index].arg_types.iter().enumerate() {
-                scope.insert(self.procs[index].arg_names[i].clone(), arg_type.clone());
+                scope.insert(self.procs[index].args[i].clone(), arg_type.clone());
             }
             let proc = self.procs[index].clone();
             let constraints = self.gen_constraints(&proc)?;
             new_procs.push(self.solve_constraints(&proc, &constraints)?);
             index += 1;
         }
-        self.procs = new_procs;
+        self.procs = dbg!(new_procs);
         Ok(())
     }
 
     fn gen_constraints(&mut self, proc: &IRProc) -> Result<Constraints, Error> {
         use InstructionType::*;
-        let mut constraints = HashMap::new();
+        let mut constraints = Vec::new();
         let mut stack = vec![];
         for ins in &proc.body {
+            dbg!(ins.ins.clone());
             match ins.ins.clone() {
                 Push(_) => {
                     stack.push(ins.typ.clone());
@@ -53,7 +55,7 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(
                         &mut constraints,
                         stack.pop().unwrap(),
-                        IRType::Primitive(Type::Bool),
+                        Type::Bool,
                     );
                 }
                 Jump(_) => (),
@@ -74,7 +76,7 @@ impl<'i> IRBuilder<'i> {
                 Return => {
                     let type_to_return = stack.pop().unwrap();
                     //let ret_type = ins.typ.clone();
-                    constraints.insert(type_to_return, proc.ret_type.clone());
+                    add_constraint(&mut constraints, type_to_return, proc.ret_type.clone());
                 }
 
                 Negate => {
@@ -87,6 +89,7 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
                     add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
+                    stack.push(ins.typ.clone());
                 }
 
                 Compare(_) => {
@@ -96,11 +99,12 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(
                         &mut constraints,
                         ins.typ.clone(),
-                        IRType::Primitive(Type::Bool),
+                        Type::Bool,
                     );
-                    stack.push(IRType::Primitive(Type::Bool));
+                    stack.push(Type::Bool);
                 }
             };
+            dbg!(stack.clone());
         }
         Ok(constraints)
     }
@@ -126,15 +130,15 @@ impl<'i> IRBuilder<'i> {
 
         Ok(IRProc {
             name: proc.name.clone(),
+            args: proc.args.clone(),
             arg_types: proc.arg_types.clone(),
-            arg_names: proc.arg_names.clone(),
             ret_type: proc.ret_type.clone(),
             body: new_body,
         })
     }
 }
 
-fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec<Instruction> {
+fn substitute_proc_body(body: Vec<Instruction>, t1: &Type, t2: &Type) -> Vec<Instruction> {
     let mut new_body = vec![];
 
     for ins in body {
@@ -156,8 +160,8 @@ fn substitute_proc_body(body: Vec<Instruction>, t1: &IRType, t2: &IRType) -> Vec
     new_body
 }
 
-fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -> Constraints {
-    let mut new_constraints = HashMap::new();
+fn substitute_constraints(constraints: &Constraints, t1: &Type, t2: &Type) -> Constraints {
+    let mut new_constraints = Vec::new();
 
     for (left, right) in constraints {
         let new_left = if *left == *t1 {
@@ -172,20 +176,29 @@ fn substitute_constraints(constraints: &Constraints, t1: &IRType, t2: &IRType) -
             right.clone()
         };
 
-        new_constraints.insert(new_left, new_right);
+        new_constraints.push((new_left, new_right));
     }
 
     new_constraints
 }
 
-fn add_constraint(constraints: &mut Constraints, t1: IRType, t2: IRType) {
+fn add_constraint(constraints: &mut Constraints, t1: Type, t2: Type) {
     println!("Trying to add constraint: {:?} == {:?}", t1.clone(), t2.clone());
     if t1 == t2 {
         return;
     }
-    if let IRType::Variable(_) = t2 {
-        constraints.insert(t2, t1);
+    if t1 == Type::StrLiteral || t2 == Type::StrLiteral {
+        return;
+    }
+    if let Type::Variable(_) = t2 {
+        constraints.push((t2, t1));
     } else {
-        constraints.insert(t1, t2);
+        if t2 == Type::IntLiteral
+            || t2 == Type::FloatLiteral
+            || t2 == Type::StrLiteral {
+            constraints.push((t2, t1));
+        } else {
+            constraints.push((t1, t2));
+        }
     }
 }

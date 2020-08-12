@@ -1,4 +1,4 @@
-//! The Chi lexer
+//! The Elgin lexer
 
 use std::fmt;
 
@@ -18,6 +18,9 @@ pub enum Token {
 
     // operator
     Op(String),
+
+    // documentation comment
+    DocComment(String),
 
     // keywords
     Proc,
@@ -189,6 +192,25 @@ impl<'l> Lexer<'l> {
         }
     }
 
+    fn comment(&mut self) {
+        self.next(); // throwaway initial #
+        while self.peek() != '\n' && self.peek() != '\0' {
+            self.next();
+        }
+        self.next();
+    }
+
+    fn doc_comment(&mut self) -> Token {
+        self.next(); // throwaway initial #
+        self.next(); // throwaway initial :
+        let mut doc_comment = String::new();
+        while self.peek() != '\n' && self.peek() != '\0' {
+            doc_comment.push(self.next());
+        }
+        self.next();
+        Token::DocComment(doc_comment)
+    }
+
     pub fn go(&mut self) -> Result<Vec<Span>, Error> {
         let mut tokens = vec![];
         loop {
@@ -212,6 +234,14 @@ impl<'l> Lexer<'l> {
                         tokens.push(self.spanned(special));
                     }
                 }
+                '#' => {
+                    if self.code[self.index + 1] == ':' {
+                        let doc_comment = self.doc_comment();
+                        tokens.push(self.spanned(doc_comment));
+                    } else {
+                        self.comment();
+                    }
+                }
                 ch if is_special(ch) => {
                     let special = self.special();
                     tokens.push(self.spanned(special));
@@ -227,7 +257,7 @@ impl<'l> Lexer<'l> {
                 ch if ch == '\n' => {
                     // token::proc doesn't matter, just needs to be
                     // something that doesn't trigger newline suppression
-                    if tokens.last().unwrap().token == Token::Newline {
+                    if tokens.len() > 0 && tokens.last().unwrap().token == Token::Newline {
                         self.next(); // skip consecutive newlines
                     } else {
                         match tokens
@@ -322,6 +352,8 @@ fn token_len(t: &Token) -> usize {
 
         Token::Ident(s) => s.len(),
         Token::Op(s) => s.len(),
+
+        Token::DocComment(s) => s.len() + 2,
 
         Token::Proc => 4,
         Token::If => 2,

@@ -1,16 +1,15 @@
-//! The Chi parser
+//! The Elgin parser
 
 use crate::errors::Error;
 use crate::lexer::{Span, Token};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type {
-    ConstInt,
-    ConstFloat,
-    ConstStr,
+use std::fmt;
 
-    Undefined,
-    Bool,
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum Type {
+    IntLiteral,
+    FloatLiteral,
+    StrLiteral,
 
     I8,
     I16,
@@ -28,9 +27,53 @@ pub enum Type {
     F64,
     F128,
 
-    Str,
+    Bool,
+
+    Variable(usize),
 
     Unknown,
+    Undefined,
+    NoReturn,
+
+    Ptr(Box<Type>),
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Type::*;
+        match self {
+            IntLiteral => write!(f, "intLiteral"),
+            FloatLiteral => write!(f, "floatLiteral"),
+            StrLiteral => write!(f, "strLiteral"),
+
+            I8 => write!(f, "i8"),
+            I16 => write!(f, "i16"),
+            I32 => write!(f, "i32"),
+            I64 => write!(f, "i64"),
+            I128 => write!(f, "i128"),
+
+            N8 => write!(f, "n8"),
+            N16 => write!(f, "n16"),
+            N32 => write!(f, "n32"),
+            N64 => write!(f, "n64"),
+            N128 => write!(f, "n128"),
+
+            F32 => write!(f, "f32"),
+            F64 => write!(f, "f64"),
+            F128 => write!(f, "f128"),
+
+            Bool => write!(f, "bool"),
+
+            Ptr(t) => write!(f, "*{:?}", t),
+
+            Variable(n) => write!(f, "${}", n),
+
+            Unknown => write!(f, "UNKNOWN"),
+            Undefined => write!(f, "undefined"),
+            NoReturn => write!(f, "noreturn"),
+        }?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -207,47 +250,64 @@ impl<'p> Parser<'p> {
     }
 
     fn ensure_type(&mut self) -> Result<Type, Error> {
-        if let Token::Ident(id) = self.peek().token.clone() {
-            let typ = match id.as_str() {
-                "i8" => Type::I8,
-                "i16" => Type::I16,
-                "i32" => Type::I32,
-                "i64" => Type::I64,
-                "i128" => Type::I128,
+        match self.peek().token.clone() {
+            Token::Ident(id) => {
+                let typ = match id.as_str() {
+                    "i8" => Type::I8,
+                    "i16" => Type::I16,
+                    "i32" => Type::I32,
+                    "i64" => Type::I64,
+                    "i128" => Type::I128,
 
-                "n8" => Type::N8,
-                "n16" => Type::N16,
-                "n32" => Type::N32,
-                "n64" => Type::N64,
-                "n128" => Type::N128,
+                    "n8" => Type::N8,
+                    "n16" => Type::N16,
+                    "n32" => Type::N32,
+                    "n64" => Type::N64,
+                    "n128" => Type::N128,
 
-                "f32" => Type::F32,
-                "f64" => Type::F64,
-                "f128" => Type::F128,
+                    "f32" => Type::F32,
+                    "f64" => Type::F64,
+                    "f128" => Type::F128,
 
-                "bool" => Type::Bool,
+                    "bool" => Type::Bool,
 
-                "str" => Type::Str,
-                _ => {
-                    return Err(Error::ExpectedType {
-                        found: self.peek().clone(),
-                    })
-                }
-            };
-            self.next();
-            Ok(typ)
-        } else {
-            Err(Error::ExpectedType {
-                found: self.peek().clone(),
-            })
+                    _ => {
+                        return Err(Error::ExpectedType {
+                            found: self.peek().clone(),
+                        })
+                    }
+                };
+                self.next();
+                Ok(typ)
+            },
+            Token::Op(s) if s == "*" => {
+                self.next();
+                let content_type = self.ensure_type()?;
+                Ok(Type::Ptr(Box::new(content_type)))
+            },
+            _ => {
+                Err(Error::ExpectedType {
+                    found: self.peek().clone(),
+                })
+            },
         }
     }
 
     pub fn go(&mut self) -> Result<Vec<Node>, Error> {
         let mut nodes = vec![];
         loop {
-            nodes.push(self.statement()?);
-            self.ensure_next(Token::Newline)?;
+            match self.peek().token {
+                Token::DocComment(_) => {
+                    self.next(); // one day there will be doc comment support
+                },
+                Token::Newline => {
+                    self.next();
+                },
+                _ => {
+                    nodes.push(self.statement()?);
+                    self.ensure_next(Token::Newline)?;
+                }
+            };
             if self.peek().token == Token::EOF {
                 break;
             }
@@ -533,7 +593,7 @@ impl<'p> Parser<'p> {
                 start,
                 end,
             } => Node::Literal {
-                typ: Type::ConstInt,
+                typ: Type::IntLiteral,
                 value: int,
                 lineno,
                 start,
@@ -545,7 +605,7 @@ impl<'p> Parser<'p> {
                 start,
                 end,
             } => Node::Literal {
-                typ: Type::ConstFloat,
+                typ: Type::FloatLiteral,
                 value: float,
                 lineno,
                 start,
@@ -557,7 +617,7 @@ impl<'p> Parser<'p> {
                 start,
                 end,
             } => Node::Literal {
-                typ: Type::ConstStr,
+                typ: Type::StrLiteral,
                 value: s,
                 lineno,
                 start,
