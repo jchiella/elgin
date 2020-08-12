@@ -1,0 +1,5 @@
+proc main(): i32 {
+    var s: *i8 = "Hi there!"
+    puts(s)
+    return 0
+}
