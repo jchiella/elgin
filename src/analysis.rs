@@ -43,6 +43,11 @@ impl<'i> IRBuilder<'i> {
                 Load(var) => {
                     stack.push(self.locate_var(&var)?);
                 }
+                Store(var) => {
+                    let typ = stack.pop().unwrap();
+                    add_constraint(&mut constraints, ins.typ.clone(), typ);
+                    add_constraint(&mut constraints, ins.typ.clone(), self.locate_var(&var)?);
+                }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
                     let var_type = ins.typ.clone();

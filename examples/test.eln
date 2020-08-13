@@ -1,4 +1,5 @@
 proc main(): i32 {
-    var arr: [10]i32
-    return 0
+    var x = 10
+    x = 100
+    return x
 }

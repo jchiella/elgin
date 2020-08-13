@@ -141,6 +141,7 @@ impl<'g> Generator<'g> {
         match ins.clone().ins {
             Push(s) => self.push(s, typ),
             Load(s) => self.load(s, typ),
+            Store(s) => self.store(s, typ),
             Allocate(s) => self.allocate(s, typ),
 
             Branch(b, e) => self.branch(b, e),
@@ -203,6 +204,17 @@ impl<'g> Generator<'g> {
                 self.cstr("tmpload"),
             );
             self.stack.push(ld);
+        }
+    }
+
+    fn store(&mut self, s: String, _typ: Type) {
+        let var = self.lookup.get(&s).unwrap();
+        unsafe {
+            LLVMBuildStore(
+                self.builder,
+                self.stack.pop().unwrap(),
+                *var,
+            );
         }
     }
 

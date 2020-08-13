@@ -4,7 +4,9 @@ declare i32 @puts(i8*)
 
 define i32 @main() {
 entry:
-  %arr = alloca [10 x i32]
-  store [10 x i32] undef, [10 x i32]* %arr
-  ret i32 0
+  %x = alloca i32
+  store i32 10, i32* %x
+  store i32 100, i32* %x
+  %tmpload = load i32, i32* %x
+  ret i32 %tmpload
 }

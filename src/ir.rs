@@ -42,6 +42,7 @@ pub enum CompareType {
 pub enum InstructionType {
     Push(String),     // pushes an immediate value to the stack
     Load(String),     // pushes a variable's contents to the stack
+    Store(String),    // pops a value from the stack into a variable
     Allocate(String), // creates a new local variable and gives it the top value of the stack
 
     Branch(usize, usize), // conditional branch with if body and else body
@@ -529,7 +530,15 @@ impl<'i> IRBuilder<'i> {
         start: usize,
         end: usize,
     ) -> IRResult {
-        todo!()
+        let mut res = self.node(&value)?;
+        res.push(Instruction {
+            ins: InstructionType::Store(name.clone()),
+            typ: self.locate_var(&name)?,
+            lineno,
+            start,
+            end,
+        });
+        Ok(res)
     }
 
     fn return_statement(
