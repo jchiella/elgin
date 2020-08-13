@@ -88,7 +88,7 @@ impl<'i> IRBuilder<'i> {
                     let t1 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
                 }
-                Add | Subtract | Multiply => {
+                Add(_) | Subtract(_) | Multiply(_) => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());

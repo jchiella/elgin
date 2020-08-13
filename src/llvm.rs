@@ -151,10 +151,10 @@ impl<'g> Generator<'g> {
             Call(pn) => self.call(pn),
             Return => self.return_(typ),
 
-            Negate => self.negate(typ),
-            Add => self.add(typ),
-            Subtract => self.subtract(typ),
-            Multiply => self.multiply(typ),
+            Negate(wrap) => self.negate(typ, wrap),
+            Add(wrap) => self.add(typ, wrap),
+            Subtract(wrap) => self.subtract(typ, wrap),
+            Multiply(wrap) => self.multiply(typ, wrap),
 
             Compare(m) => self.compare(m, typ),
         }
@@ -248,7 +248,6 @@ impl<'g> Generator<'g> {
     fn return_(&mut self, typ: Type) {
         unsafe {
             if let Type::Undefined = dbg!(typ) {
-                dbg!("Void");
                 LLVMBuildRetVoid(self.builder);
             } else {
                 LLVMBuildRet(self.builder, dbg!(self.stack.pop().unwrap()));
@@ -256,31 +255,89 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn negate(&mut self, typ: Type) {
+    fn negate(&mut self, typ: Type, wrap: bool) {
         unsafe {
-            let neg = LLVMBuildNeg(self.builder, self.stack.pop().unwrap(), self.cstr("tmpneg"));
+            let neg = match typ {
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    if wrap {
+                        LLVMBuildNeg(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpneg"),
+                        )
+                    } else {
+                        LLVMBuildNSWNeg(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpneg"),
+                        )
+                    }
+                },
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    if wrap {
+                        LLVMBuildNeg(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpneg"),
+                        )
+                    } else {
+                        LLVMBuildNUWNeg(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpneg"),
+                        )
+                    }
+                },
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => LLVMBuildFNeg(
+                        self.builder,
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpneg"),
+                ),
+                _ => unreachable!(),
+            };
             self.stack.push(neg);
         }
     }
 
-    fn add(&mut self, typ: Type) {
+    fn add(&mut self, typ: Type, wrap: bool) {
         unsafe {
             let add = match typ {
-                Type::I8
-                    | Type::I16
-                    | Type::I32
-                    | Type::I64
-                    | Type::I128 
-                    | Type::N8
-                    | Type::N16
-                    | Type::N32
-                    | Type::N64
-                    | Type::N128 => LLVMBuildAdd(
-                        self.builder,
-                        self.stack.pop().unwrap(),
-                        self.stack.pop().unwrap(),
-                        self.cstr("tmpadd"),
-                ),
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    if wrap {
+                        LLVMBuildAdd(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpadd"),
+                        )
+                    } else {
+                        LLVMBuildNSWAdd(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpadd"),
+                        )
+                    }
+                },
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    if wrap {
+                        LLVMBuildAdd(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpadd"),
+                        )
+                    } else {
+                        LLVMBuildNUWAdd(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpadd"),
+                        )
+                    }
+                },
                 Type::F32
                     | Type::F64
                     | Type::F128 => LLVMBuildFAdd(
@@ -295,33 +352,52 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn subtract(&mut self, typ: Type) {
+    fn subtract(&mut self, typ: Type, wrap: bool) {
         unsafe {
             let v1 = self.stack.pop().unwrap();
             let v2 = self.stack.pop().unwrap();
             let sub = match typ {
-                Type::I8
-                    | Type::I16
-                    | Type::I32
-                    | Type::I64
-                    | Type::I128 
-                    | Type::N8
-                    | Type::N16
-                    | Type::N32
-                    | Type::N64
-                    | Type::N128 => LLVMBuildSub(
-                        self.builder,
-                        v2,
-                        v1,
-                        self.cstr("tmpadd"),
-                ),
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    if wrap {
+                        LLVMBuildSub(
+                                self.builder,
+                                v2,
+                                v1,
+                                self.cstr("tmpsub"),
+                        )
+                    } else {
+                        LLVMBuildNSWSub(
+                                self.builder,
+                                v2,
+                                v1,
+                                self.cstr("tmpsub"),
+                        )
+                    }
+                },
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    if wrap {
+                        LLVMBuildSub(
+                                self.builder,
+                                v2,
+                                v1,
+                                self.cstr("tmpsub"),
+                        )
+                    } else {
+                        LLVMBuildNUWSub(
+                                self.builder,
+                                v2,
+                                v1,
+                                self.cstr("tmpsub"),
+                        )
+                    }
+                },
                 Type::F32
                     | Type::F64
                     | Type::F128 => LLVMBuildFSub(
                         self.builder,
                         v2,
                         v1,
-                        self.cstr("tmpadd"),
+                        self.cstr("tmpsub"),
                 ),
                 _ => unreachable!(),
             };
@@ -329,40 +405,53 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn multiply(&mut self, typ: Type) {
+    fn multiply(&mut self, typ: Type, wrap: bool) {
         unsafe {
             let mul = match typ {
-                Type::I8
-                    | Type::I16
-                    | Type::I32
-                    | Type::I64
-                    | Type::I128 
-                    | Type::N8
-                    | Type::N16
-                    | Type::N32
-                    | Type::N64
-                    | Type::N128 => LLVMBuildMul(
-                        self.builder,
-                        self.stack.pop().unwrap(),
-                        self.stack.pop().unwrap(),
-                        self.cstr("tmpadd"),
-                ),
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    if wrap {
+                        LLVMBuildMul(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpmul"),
+                        )
+                    } else {
+                        LLVMBuildNSWMul(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpmul"),
+                        )
+                    }
+                },
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    if wrap {
+                        LLVMBuildMul(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpmul"),
+                        )
+                    } else {
+                        LLVMBuildNUWMul(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpmul"),
+                        )
+                    }
+                },
                 Type::F32
                     | Type::F64
                     | Type::F128 => LLVMBuildFMul(
                         self.builder,
                         self.stack.pop().unwrap(),
                         self.stack.pop().unwrap(),
-                        self.cstr("tmpadd"),
+                        self.cstr("tmpmul"),
                 ),
                 _ => unreachable!(),
             };
-            let mul = LLVMBuildMul(
-                self.builder,
-                self.stack.pop().unwrap(),
-                self.stack.pop().unwrap(),
-                self.cstr("tmpmul"),
-            );
             self.stack.push(mul);
         }
     }
@@ -370,21 +459,60 @@ impl<'g> Generator<'g> {
     fn compare(&mut self, comptype: CompareType, typ: Type) {
         unsafe {
             use llvm::LLVMIntPredicate::*;
-            dbg!(self.stack.clone());
-            let cmp = LLVMBuildICmp(
-                self.builder,
-                match comptype {
-                    CompareType::EQ => LLVMIntEQ,
-                    CompareType::NE => LLVMIntNE,
-                    CompareType::LT => LLVMIntSLT,
-                    CompareType::GT => LLVMIntSGT,
-                    CompareType::LE => LLVMIntSLE,
-                    CompareType::GE => LLVMIntSGE,
+            use llvm::LLVMRealPredicate::*;
+            let cmp = match typ {
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    LLVMBuildICmp(
+                        self.builder,
+                        match comptype {
+                            CompareType::EQ => LLVMIntEQ,
+                            CompareType::NE => LLVMIntNE,
+                            CompareType::LT => LLVMIntSLT,
+                            CompareType::GT => LLVMIntSGT,
+                            CompareType::LE => LLVMIntSLE,
+                            CompareType::GE => LLVMIntSGE,
+                        },
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpcmp"),
+                    )
                 },
-                self.stack.pop().unwrap(),
-                self.stack.pop().unwrap(),
-                self.cstr("tmpcmp"),
-            );
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    LLVMBuildICmp(
+                        self.builder,
+                        match comptype {
+                            CompareType::EQ => LLVMIntEQ,
+                            CompareType::NE => LLVMIntNE,
+                            CompareType::LT => LLVMIntUGT,
+                            CompareType::GT => LLVMIntUGT,
+                            CompareType::LE => LLVMIntULE,
+                            CompareType::GE => LLVMIntUGE,
+                        },
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpcmp"),
+                    )
+                },
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => {
+                        LLVMBuildFCmp(
+                            self.builder,
+                            match comptype {
+                                CompareType::EQ => LLVMRealOEQ,
+                                CompareType::NE => LLVMRealONE,
+                                CompareType::LT => LLVMRealOGT,
+                                CompareType::GT => LLVMRealOGT,
+                                CompareType::LE => LLVMRealOLE,
+                                CompareType::GE => LLVMRealOGE,
+                            },
+                            self.stack.pop().unwrap(),
+                            self.stack.pop().unwrap(),
+                            self.cstr("tmpcmp"),
+                        )
+                    }
+                _ => unreachable!(),
+            };
             self.stack.push(cmp);
         }
     }

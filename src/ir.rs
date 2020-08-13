@@ -53,10 +53,10 @@ pub enum InstructionType {
     Call(String), // call another proc from this one
     Return,       // return to the calling proc with the value on the stack
 
-    Negate,
-    Add,
-    Subtract,
-    Multiply,
+    Negate(bool), // whether or not wrapping is enabled
+    Add(bool), 
+    Subtract(bool),
+    Multiply(bool),
 
     Compare(CompareType),
 }
@@ -328,13 +328,17 @@ impl<'i> IRBuilder<'i> {
     ) -> IRResult {
         let mut res = vec![];
         res.append(&mut self.node(&left)?);
-
         res.append(&mut self.node(&right)?);
+
         res.push(Instruction {
             ins: match op.as_str() {
-                "+" => InstructionType::Add,
-                "-" => InstructionType::Subtract,
-                "*" => InstructionType::Multiply,
+                "+" => InstructionType::Add(false),
+                "-" => InstructionType::Subtract(false),
+                "*" => InstructionType::Multiply(false),
+
+                "+~" => InstructionType::Add(true),
+                "-~" => InstructionType::Subtract(true),
+                "*~" => InstructionType::Multiply(true),
 
                 "==" => InstructionType::Compare(CompareType::EQ),
                 "!=" => InstructionType::Compare(CompareType::NE),
@@ -364,7 +368,8 @@ impl<'i> IRBuilder<'i> {
         res.append(&mut self.node(&right)?);
         res.push(Instruction {
             ins: match op.as_str() {
-                "-" => InstructionType::Negate,
+                "-" => InstructionType::Negate(false),
+                "-~" => InstructionType::Negate(true),
                 _ => todo!(),
             },
             typ: Type::Variable(self.next_type_var()),
