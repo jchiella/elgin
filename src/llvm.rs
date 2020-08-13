@@ -265,12 +265,32 @@ impl<'g> Generator<'g> {
 
     fn add(&mut self, typ: Type) {
         unsafe {
-            let add = LLVMBuildAdd(
-                self.builder,
-                self.stack.pop().unwrap(),
-                self.stack.pop().unwrap(),
-                self.cstr("tmpadd"),
-            );
+            let add = match typ {
+                Type::I8
+                    | Type::I16
+                    | Type::I32
+                    | Type::I64
+                    | Type::I128 
+                    | Type::N8
+                    | Type::N16
+                    | Type::N32
+                    | Type::N64
+                    | Type::N128 => LLVMBuildAdd(
+                        self.builder,
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpadd"),
+                ),
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => LLVMBuildFAdd(
+                        self.builder,
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpadd"),
+                ),
+                _ => unreachable!(),
+            };
             self.stack.push(add);
         }
     }
@@ -279,18 +299,64 @@ impl<'g> Generator<'g> {
         unsafe {
             let v1 = self.stack.pop().unwrap();
             let v2 = self.stack.pop().unwrap();
-            let sub = LLVMBuildSub(
-                self.builder,
-                v2,
-                v1,
-                self.cstr("tmpsub"),
-            );
+            let sub = match typ {
+                Type::I8
+                    | Type::I16
+                    | Type::I32
+                    | Type::I64
+                    | Type::I128 
+                    | Type::N8
+                    | Type::N16
+                    | Type::N32
+                    | Type::N64
+                    | Type::N128 => LLVMBuildSub(
+                        self.builder,
+                        v2,
+                        v1,
+                        self.cstr("tmpadd"),
+                ),
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => LLVMBuildFSub(
+                        self.builder,
+                        v2,
+                        v1,
+                        self.cstr("tmpadd"),
+                ),
+                _ => unreachable!(),
+            };
             self.stack.push(sub);
         }
     }
 
     fn multiply(&mut self, typ: Type) {
         unsafe {
+            let mul = match typ {
+                Type::I8
+                    | Type::I16
+                    | Type::I32
+                    | Type::I64
+                    | Type::I128 
+                    | Type::N8
+                    | Type::N16
+                    | Type::N32
+                    | Type::N64
+                    | Type::N128 => LLVMBuildMul(
+                        self.builder,
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpadd"),
+                ),
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => LLVMBuildFMul(
+                        self.builder,
+                        self.stack.pop().unwrap(),
+                        self.stack.pop().unwrap(),
+                        self.cstr("tmpadd"),
+                ),
+                _ => unreachable!(),
+            };
             let mul = LLVMBuildMul(
                 self.builder,
                 self.stack.pop().unwrap(),
