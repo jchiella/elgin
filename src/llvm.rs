@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 
 use crate::ir::{CompareType, IRProc, Instruction, InstructionType};
-use crate::parser::Type;
+use crate::types::Type;
+use crate::errors::Span;
 
 pub struct Generator<'g> {
     procs: &'g [IRProc],
@@ -83,7 +84,7 @@ impl<'g> Generator<'g> {
             unsafe {
                 for ins in &proc.body {
                     // index labels before starting
-                    if let InstructionType::Label(label) = ins.ins {
+                    if let InstructionType::Label(label) = ins.contents.ins {
                         let mut lbl = "lbl".to_string();
                         lbl.push_str(&label.to_string());
                         let bb = LLVMCreateBasicBlockInContext(self.context, self.cstr(&lbl));
@@ -135,10 +136,10 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn ins(&mut self, ins: &Instruction) {
+    fn ins(&mut self, ins: &Span<Instruction>) {
         use crate::ir::InstructionType::*;
-        let typ = ins.typ.clone();
-        match ins.clone().ins {
+        let typ = ins.contents.typ.clone();
+        match ins.clone().contents.ins {
             Push(s) => self.push(s, typ),
             Load(s) => self.load(s, typ),
             Store(s) => self.store(s, typ),

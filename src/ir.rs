@@ -2,22 +2,23 @@
 //! Elgin IR is the intermediate representation which is then used for type analysis in analysis.rs
 //! It is then converted into LLVM IR in the codegen phase
 
-use crate::errors::Error;
-use crate::parser::{Node, Type};
+use crate::errors::{Logger, Span};
+use crate::parser::Node;
+use crate::types::Type;
 
 use std::collections::HashMap;
 use std::fmt;
 
-type IRResult = Result<Vec<Instruction>, Error>;
-
 type Scope = HashMap<String, Type>;
+type IRResult = Option<Vec<Span<Instruction>>>;
 
 pub struct IRBuilder<'i> {
-    ast: &'i [Node],
+    ast: &'i [Span<Node>],
     pub available_type_var: usize,
     available_label_id: usize,
     pub scopes: Vec<Scope>,
-    pub procs: Vec<IRProc>, }
+    pub procs: Vec<IRProc>, 
+}
 
 #[derive(Debug, Clone)]
 pub struct IRProc {
@@ -25,7 +26,7 @@ pub struct IRProc {
     pub args: Vec<String>,
     pub arg_types: Vec<Type>,
     pub ret_type: Type,
-    pub body: Vec<Instruction>,
+    pub body: Vec<Span<Instruction>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -68,9 +69,6 @@ pub enum InstructionType {
 pub struct Instruction {
     pub ins: InstructionType,
     pub typ: Type,
-    pub lineno: usize,
-    pub start: usize,
-    pub end: usize,
 }
 
 impl fmt::Debug for Instruction {
@@ -79,8 +77,16 @@ impl fmt::Debug for Instruction {
     }
 }
 
+pub fn spanned(ins: Instruction, pos: usize, len: usize) -> Span<Instruction> {
+    Span {
+        contents: ins.clone(),
+        pos,
+        len,
+    }
+}
+
 impl<'i> IRBuilder<'i> {
-    pub fn new(ast: &'i [Node]) -> Self {
+    pub fn new(ast: &'i [Span<Node>]) -> Self {
         IRBuilder {
             ast,
             available_type_var: 0,
@@ -90,20 +96,17 @@ impl<'i> IRBuilder<'i> {
         }
     }
 
-    pub fn go(&mut self) -> Result<&Vec<IRProc>, Error> {
+    pub fn go(&mut self) -> Option<&Vec<IRProc>> {
         self.build_header();
         // just declare all functions + constants
         for node in self.ast {
-            match node.clone() {
+            match node.clone().contents {
                 Node::ConstStatement {
                     name,
                     typ,
                     value,
-                    lineno,
-                    start,
-                    end,
                 } => {
-                    self.const_statement(name, typ, value, lineno, start, end)?;
+                    self.const_statement(name, typ, value, node.pos, node.len)?;
                 }
                 Node::ProcStatement {
                     name,
@@ -120,19 +123,23 @@ impl<'i> IRBuilder<'i> {
                         body: vec![],
                     });
                 }
-                n => return Err(Error::InvalidAtTopLevel { node: n }),
+                n => {
+                    Logger::syntax_error(
+                        format!("A node of type {:?} is not allowed at the top level of a module", n).as_str(),
+                        node.pos,
+                        node.len,
+                    );
+                    return None
+                }
             }
         }
         // then actually generate code
         for node in self.ast {
-            match node.clone() {
+            match node.clone().contents {
                 Node::ConstStatement {
                     name,
                     typ,
                     value,
-                    lineno,
-                    start,
-                    end,
                 } => {
                     todo!()
                 }
@@ -142,12 +149,9 @@ impl<'i> IRBuilder<'i> {
                     arg_types,
                     ret_type,
                     body,
-                    lineno,
-                    start,
-                    end,
                 } => {
                     let pstat = self.proc_statement(
-                        name, args, arg_types, ret_type, body, lineno, start, end,
+                        name, args, arg_types, ret_type, body, node.pos, node.len,
                     )?;
                     // FIXME this is a temporary workaround (procs should really be a hashmap)
                     for (i, proc) in self.procs.iter().enumerate() {
@@ -157,10 +161,10 @@ impl<'i> IRBuilder<'i> {
                         }
                     }
                 }
-                n => return Err(Error::InvalidAtTopLevel { node: n }),
+                _ => unreachable!(),
             }
         }
-        Ok(&self.procs)
+        Some(&self.procs)
     }
 
     fn build_header(&mut self) {
@@ -173,108 +177,66 @@ impl<'i> IRBuilder<'i> {
         });
     }
 
-    fn node(&mut self, node: &Node) -> IRResult {
+    fn node(&mut self, node: &Span<Node>) -> IRResult { 
         use crate::parser::Node::*;
-        Ok(match node.clone() {
+        Some(match node.clone().contents {
             Literal {
                 typ,
                 value,
-                lineno,
-                start,
-                end,
-            } => self.literal(typ, value, lineno, start, end)?,
+            } => self.literal(typ, value, node.pos, node.len)?,
             Call {
                 name,
                 args,
-                lineno,
-                start,
-                end,
-            } => self.call(name, args, lineno, start, end)?,
+            } => self.call(name, args, node.pos, node.len)?,
             InfixOp {
                 op,
                 left,
                 right,
-                lineno,
-                start,
-                end,
-            } => self.infix_op(op, left, right, lineno, start, end)?,
+            } => self.infix_op(op, left, right, node.pos, node.len)?,
             PrefixOp {
                 op,
                 right,
-                lineno,
-                start,
-                end,
-            } => self.prefix_op(op, right, lineno, start, end)?,
+            } => self.prefix_op(op, right, node.pos, node.len)?,
             PostfixOp {
                 op,
                 left,
-                lineno,
-                start,
-                end,
-            } => self.postfix_op(op, left, lineno, start, end)?,
+            } => self.postfix_op(op, left, node.pos, node.len)?,
             IndexOp {
                 object,
                 index,
-                lineno,
-                start,
-                end,
-            } => self.index_op(object, index, lineno, start, end)?,
+            } => self.index_op(object, index, node.pos, node.len)?,
             VariableRef {
                 name,
-                lineno,
-                start,
-                end,
-            } => self.variable_ref(name, lineno, start, end)?,
+            } => self.variable_ref(name, node.pos, node.len)?,
             IfStatement {
                 condition,
                 body,
                 else_body,
-                lineno,
-                start,
-                end,
-            } => self.if_statement(condition, body, else_body, lineno, start, end)?,
+            } => self.if_statement(condition, body, else_body, node.pos, node.len)?,
             WhileStatement {
                 condition,
                 body,
-                lineno,
-                start,
-                end,
-            } => self.while_statement(condition, body, lineno, start, end)?,
+            } => self.while_statement(condition, body, node.pos, node.len)?,
             Block {
                 nodes,
-                lineno,
-                start,
-                end,
-            } => self.block(nodes, lineno, start, end)?,
+            } => self.block(nodes, node.pos, node.len)?,
             VarStatement {
                 name,
                 typ,
                 value,
-                lineno,
-                start,
-                end,
-            } => self.var_statement(name, typ, value, lineno, start, end)?,
+            } => self.var_statement(name, typ, value, node.pos, node.len)?,
             ConstStatement {
                 name,
                 typ,
                 value,
-                lineno,
-                start,
-                end,
-            } => self.const_statement(name, typ, value, lineno, start, end)?,
+            } => self.const_statement(name, typ, value, node.pos, node.len)?,
             AssignStatement {
                 name,
                 value,
-                lineno,
-                start,
-                end,
-            } => self.assign_statement(name, value, lineno, start, end)?,
+            } => self.assign_statement(name, value, node.pos, node.len)?,
             ReturnStatement {
                 val,
-                lineno,
-                start,
-                end,
-            } => self.return_statement(val, lineno, start, end)?,
+            } => self.return_statement(val, node.pos, node.len)?,
             _ => unreachable!(),
         })
     }
@@ -283,56 +245,47 @@ impl<'i> IRBuilder<'i> {
         &mut self,
         typ: Type,
         value: String,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
-        Ok(vec![Instruction {
+        Some(vec![spanned(Instruction {
             ins: InstructionType::Push(value),
             typ,
-            lineno,
-            start,
-            end,
-        }])
+        }, pos, len)])
     }
 
     fn call(
         &mut self,
         name: String,
-        args: Vec<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        args: Vec<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let proc = self.locate_proc(&name)?.clone();
         let mut res = vec![];
         for arg in args {
             res.append(&mut self.node(&arg)?);
         }
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: InstructionType::Call(proc.name),
             typ: proc.ret_type,
-            lineno,
-            start,
-            end,
-        });
-        Ok(res)
+        }, pos, len));
+        Some(res)
     }
 
     fn infix_op(
         &mut self,
         op: String,
-        left: Box<Node>,
-        right: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        left: Box<Span<Node>>,
+        right: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let mut res = vec![];
         res.append(&mut self.node(&left)?);
         res.append(&mut self.node(&right)?);
 
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: match op.as_str() {
                 "+" => InstructionType::Add(false),
                 "-" => InstructionType::Subtract(false),
@@ -355,78 +308,65 @@ impl<'i> IRBuilder<'i> {
                 _ => todo!(),
             },
             typ: Type::Variable(self.next_type_var()),
-            lineno,
-            start,
-            end,
-        });
-        Ok(res)
+        }, pos, len));
+        Some(res)
     }
 
     fn prefix_op(
         &mut self,
         op: String,
-        right: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        right: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let mut res = vec![];
         res.append(&mut self.node(&right)?);
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: match op.as_str() {
                 "-" => InstructionType::Negate(false),
                 "-~" => InstructionType::Negate(true),
                 _ => todo!(),
             },
             typ: Type::Variable(self.next_type_var()),
-            lineno,
-            start,
-            end,
-        });
-        Ok(res)
+        }, pos, len));
+        Some(res)
     }
 
     fn postfix_op(
         &mut self,
         op: String,
-        left: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        left: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         todo!()
     }
 
     fn index_op(
         &mut self,
-        object: Box<Node>,
-        index: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        object: Box<Span<Node>>,
+        index: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         todo!()
     }
 
-    fn variable_ref(&mut self, name: String, lineno: usize, start: usize, end: usize) -> IRResult {
+    fn variable_ref(&mut self, name: String, pos: usize, len: usize) -> IRResult {
         let typ = self.locate_var(&name)?;
-        Ok(vec![Instruction {
+        Some(vec![spanned(Instruction {
             ins: InstructionType::Load(name),
             typ,
-            lineno,
-            start,
-            end,
-        }])
+        }, pos, len)])
     }
 
     fn if_statement(
         &mut self,
-        condition: Box<Node>,
-        body: Box<Node>,
-        else_body: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        condition: Box<Span<Node>>,
+        body: Box<Span<Node>>,
+        else_body: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let mut res = vec![];
         let body_label = self.next_label_id();
@@ -435,149 +375,119 @@ impl<'i> IRBuilder<'i> {
         let mut blocks_ending_in_return = 2;
 
         res.append(&mut self.node(&condition)?);
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: InstructionType::Branch(body_label, else_label),
             typ: Type::NoReturn,
-            lineno,
-            start,
-            end,
-        });
-        res.push(Instruction {
+        }, pos, len));
+        res.push(spanned(Instruction {
             ins: InstructionType::Label(body_label),
             typ: Type::Undefined,
-            lineno,
-            start,
-            end,
-        });
+        }, pos, len));
         res.append(&mut self.node(&body)?);
-        if res.last().unwrap().ins != InstructionType::Return {
+        if res.last().unwrap().contents.ins != InstructionType::Return {
             blocks_ending_in_return -= 1;
-            res.push(Instruction {
+            res.push(spanned(Instruction {
                 ins: InstructionType::Jump(end_label),
                 typ: Type::Undefined,
-                lineno,
-                start,
-                end,
-            });
+            }, pos, len));
         }
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: InstructionType::Label(else_label),
             typ: Type::Undefined,
-            lineno,
-            start,
-            end,
-        });
+        }, pos, len));
         res.append(&mut self.node(&else_body)?);
-        if res.last().unwrap().ins != InstructionType::Return {
+        if res.last().unwrap().contents.ins != InstructionType::Return {
             blocks_ending_in_return -= 1;
-            res.push(Instruction {
+            res.push(spanned(Instruction {
                 ins: InstructionType::Jump(end_label),
                 typ: Type::Undefined,
-                lineno,
-                start,
-                end,
-            });
+            }, pos, len));
         }
         if blocks_ending_in_return < 2 {
-            res.push(Instruction {
+            res.push(spanned(Instruction {
                 ins: InstructionType::Label(end_label),
                 typ: Type::Undefined,
-                lineno,
-                start,
-                end,
-            });
+            }, pos, len));
         }
-        Ok(res)
+        Some(res)
     }
 
     fn while_statement(
         &mut self,
-        condition: Box<Node>,
-        body: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        condition: Box<Span<Node>>,
+        body: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         todo!()
     }
 
-    fn block(&mut self, nodes: Vec<Node>, lineno: usize, start: usize, end: usize) -> IRResult {
+    fn block(&mut self, nodes: Vec<Span<Node>>, pos: usize, len: usize) -> IRResult {
         let mut res = vec![];
         for node in nodes {
             res.append(&mut self.node(&node)?);
         }
-        Ok(res)
+        Some(res)
     }
 
     fn var_statement(
         &mut self,
         name: String,
         typ: Type,
-        value: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        value: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         self.scopes
             .last_mut()
             .unwrap()
             .insert(name.clone(), typ.clone());
         let mut res = self.node(&value)?;
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: InstructionType::Allocate(name.clone()),
             typ,
-            lineno,
-            start,
-            end,
-        });
-        Ok(res)
+        }, pos, len));
+        Some(res)
     }
 
     fn assign_statement(
         &mut self,
         name: String,
-        value: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        value: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let mut res = self.node(&value)?;
-        res.push(Instruction {
+        res.push(spanned(Instruction {
             ins: InstructionType::Store(name.clone()),
             typ: self.locate_var(&name)?,
-            lineno,
-            start,
-            end,
-        });
-        Ok(res)
+        }, pos, len));
+        Some(res)
     }
 
     fn return_statement(
         &mut self,
-        val: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        val: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         let mut res = self.node(&val)?;
         res.push(
-            Instruction {
+            spanned(Instruction {
                 ins: InstructionType::Return,
-                typ: res.last().unwrap().clone().typ,
-                lineno, start, end,
-            }
+                typ: res.last().unwrap().clone().contents.typ,
+            }, pos, len)
         );
-        Ok(res)
+        Some(res)
     }
 
     fn const_statement(
         &mut self,
         name: String,
         typ: Type,
-        value: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
+        value: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
     ) -> IRResult {
         todo!()
     }
@@ -588,11 +498,10 @@ impl<'i> IRBuilder<'i> {
         args: Vec<String>,
         arg_types: Vec<Type>,
         ret_type: Type,
-        body: Box<Node>,
-        lineno: usize,
-        start: usize,
-        end: usize,
-    ) -> Result<IRProc, Error> {
+        body: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
+    ) -> Option<IRProc> {
         let mut ins = vec![];
         self.scopes.push(HashMap::new());
         let scope = self.scopes.last_mut().unwrap();
@@ -600,27 +509,21 @@ impl<'i> IRBuilder<'i> {
             let t = arg_types[i].clone();
             scope.insert(arg.clone(), t);
         }
-        if let Node::Block { nodes, .. } = *body {
+        if let Node::Block { nodes, .. } = body.contents {
             for node in &nodes {
                 ins.append(&mut self.node(&node)?);
             }
             if ret_type == Type::Undefined && nodes.len() > 0 {
-                ins.push(Instruction {
+                ins.push(spanned(Instruction {
                     ins: InstructionType::Push("undefined".to_owned()),
                     typ: Type::Undefined,
-                    lineno,
-                    start,
-                    end,
-                });
-                ins.push(Instruction {
+                }, pos, len));
+                ins.push(spanned(Instruction {
                     ins: InstructionType::Return,
                     typ: Type::Undefined,
-                    lineno,
-                    start,
-                    end,
-                });
+                }, pos, len));
             }
-            Ok(IRProc {
+            Some(IRProc {
                 name,
                 args,
                 arg_types,
@@ -642,11 +545,11 @@ impl<'i> IRBuilder<'i> {
         self.available_label_id - 1
     }
 
-    pub fn locate_var(&self, name: &String) -> Result<Type, Error> {
+    pub fn locate_var(&self, name: &String) -> Option<Type> {
         let mut scope_index = self.scopes.len() - 1;
         while scope_index >= 0 {
             if let Some(typ) = self.scopes[scope_index].get(name) {
-                return Ok(typ.clone());
+                return Some(typ.clone());
             }
             if scope_index == 0 {
                 break;
@@ -654,15 +557,23 @@ impl<'i> IRBuilder<'i> {
             scope_index -= 1
         }
 
-        Err(Error::VarNotInScope { name: name.clone() })
+        Logger::name_error(
+            format!("Can't find a variable named {} in the current scope", name).as_str(),
+            0, 0,
+        );
+        None
     }
 
-    pub fn locate_proc(&self, name: &String) -> Result<&IRProc, Error> {
+    pub fn locate_proc(&self, name: &String) -> Option<&IRProc> {
         for proc in &self.procs {
             if proc.name == *name {
-                return Ok(proc);
+                return Some(proc);
             }
         }
-        Err(Error::NoProc { name: name.clone() })
+        Logger::name_error(
+            format!("Can't find a procedure named {} in the current module", name).as_str(),
+            0, 0,
+        );
+        None
     }
 }

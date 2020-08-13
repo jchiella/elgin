@@ -1,11 +1,13 @@
-mod errors;
+#[macro_use]
+extern crate lazy_static;
 
+mod errors;
+mod types;
 mod analysis;
 mod ir;
 mod lexer;
 mod llvm;
 mod parser;
-//mod codegen;
 
 use std::io::prelude::*;
 use std::{env, fs};
@@ -24,11 +26,12 @@ fn file() {
     file.read_to_string(&mut input).unwrap();
 
     let chars = &input.chars().collect::<Vec<_>>()[..];
+
     let mut lexer = lexer::Lexer::new(chars);
     let lex_results = lexer.go().unwrap();
     println!("______________________");
     println!("lexer output:");
-    lex_results.iter().map(|t| println!("{}", t)).for_each(drop);
+    lex_results.iter().map(|t| println!("{:?}", t)).for_each(drop);
 
     let mut parser = parser::Parser::new(&lex_results);
     let parse_results = parser.go();
@@ -51,11 +54,13 @@ fn file() {
     generator.go();
     println!("______________________");
     println!("codegen output:");
-    println!("{:#?}", generator.to_cstring());
-
     println!("Dumping to file...");
     let mut file_name = env::args().nth(1).unwrap();
     file_name.push_str(".ll");
     generator.dump_to_file(&file_name);
     println!("File done!");
+
+    println!("______________________");
+    println!("Errors:");
+    println!("{:#?}", errors::ERRORS.lock().unwrap());
 }

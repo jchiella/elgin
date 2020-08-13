@@ -1,9 +1,9 @@
 //! The static analysis component of Elgin
 //! Does fun stuff like type inference
 
-use crate::errors::Error;
 use crate::ir::*;
-use crate::parser::Type;
+use crate::types::Type;
+use crate::errors::Span;
 
 use std::collections::HashMap;
 
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 type Constraints = Vec<(Type, Type)>;
 
 impl<'i> IRBuilder<'i> {
-    pub fn analyze(&mut self) -> Result<(), Error> {
+    pub fn analyze(&mut self) -> Option<()> {
         self.scopes.clear();
         let mut new_procs = Vec::new();
         let mut index = 0;
@@ -27,30 +27,30 @@ impl<'i> IRBuilder<'i> {
             index += 1;
         }
         self.procs = dbg!(new_procs);
-        Ok(())
+        Some(())
     }
 
-    fn gen_constraints(&mut self, proc: &IRProc) -> Result<Constraints, Error> {
+    fn gen_constraints(&mut self, proc: &IRProc) -> Option<Constraints> {
         use InstructionType::*;
         let mut constraints = Vec::new();
         let mut stack = vec![];
         for ins in &proc.body {
-            dbg!(ins.ins.clone());
-            match ins.ins.clone() {
+            dbg!(ins.contents.ins.clone());
+            match ins.contents.ins.clone() {
                 Push(_) => {
-                    stack.push(ins.typ.clone());
+                    stack.push(ins.contents.typ.clone());
                 }
                 Load(var) => {
                     stack.push(self.locate_var(&var)?);
                 }
                 Store(var) => {
                     let typ = stack.pop().unwrap();
-                    add_constraint(&mut constraints, ins.typ.clone(), typ);
-                    add_constraint(&mut constraints, ins.typ.clone(), self.locate_var(&var)?);
+                    add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
+                    add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
                 }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
-                    let var_type = ins.typ.clone();
+                    let var_type = ins.contents.typ.clone();
                     let scope_index = self.scopes.len() - 1;
                     self.scopes[scope_index].insert(var, var_type.clone());
                     add_constraint(&mut constraints, var_type, content_type);
@@ -86,16 +86,16 @@ impl<'i> IRBuilder<'i> {
 
                 Negate(_) => {
                     let t1 = stack.pop().unwrap();
-                    add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
+                    add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
                 }
                 // TODO more specific constraints???
                 Add(_) | Subtract(_) | Multiply(_) | IntDivide | Divide => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
-                    add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
-                    add_constraint(&mut constraints, t2.clone(), ins.typ.clone());
-                    stack.push(ins.typ.clone());
+                    add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
+                    add_constraint(&mut constraints, t2.clone(), ins.contents.typ.clone());
+                    stack.push(ins.contents.typ.clone());
                 }
 
                 Compare(_) => {
@@ -104,18 +104,17 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(&mut constraints, t1.clone(), t2.clone());
                     add_constraint(
                         &mut constraints,
-                        ins.typ.clone(),
+                        ins.contents.typ.clone(),
                         Type::Bool,
                     );
                     stack.push(Type::Bool);
                 }
             };
-            dbg!(stack.clone());
         }
-        Ok(constraints)
+        Some(constraints)
     }
 
-    fn solve_constraints(&self, proc: &IRProc, constraints: &Constraints) -> Result<IRProc, Error> {
+    fn solve_constraints(&self, proc: &IRProc, constraints: &Constraints) -> Option<IRProc> {
         println!("Generated constraints:");
         for (t1, t2) in constraints {
             println!("{:?} == {:?}", t1, t2);
@@ -134,7 +133,7 @@ impl<'i> IRBuilder<'i> {
             }
         }
 
-        Ok(IRProc {
+        Some(IRProc {
             name: proc.name.clone(),
             args: proc.args.clone(),
             arg_types: proc.arg_types.clone(),
@@ -144,24 +143,21 @@ impl<'i> IRBuilder<'i> {
     }
 }
 
-fn substitute_proc_body(body: Vec<Instruction>, t1: &Type, t2: &Type) -> Vec<Instruction> {
+fn substitute_proc_body(body: Vec<Span<Instruction>>, t1: &Type, t2: &Type) -> Vec<Span<Instruction>> {
     let mut new_body = vec![];
 
     for ins in body {
-        new_body.push(Instruction {
-            ins: ins.ins,
-            typ: if ins.typ.clone() == t1.clone() {
+        new_body.push(spanned(Instruction {
+            ins: ins.contents.ins,
+            typ: if ins.contents.typ.clone() == t1.clone() {
                 println!("{:?} => {:?}", t1.clone(), t2.clone());
                 t2.clone()
             //} else if ins.typ.clone() == t2.clone() {
             //    t1.clone()
             } else {
-                ins.typ
+                ins.contents.typ
             },
-            lineno: ins.lineno,
-            start: ins.start,
-            end: ins.end,
-        });
+        }, ins.pos, ins.len));
     }
     new_body
 }

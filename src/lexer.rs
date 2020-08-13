@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::errors::Error;
+use crate::errors::{Logger, Span};
 
 const SPECIAL_CHARS: [char; 9] = ['(', ')', '[', ']', '{', '}', ',', '=', ':'];
 
@@ -57,29 +57,9 @@ impl fmt::Display for Token {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Span {
-    pub token: Token,
-    pub lineno: usize,
-    pub start: usize,
-    pub end: usize,
-}
-
-impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} @ line {}, from {}-{}",
-            self.token, self.lineno, self.start, self.end
-        )
-    }
-}
-
 pub struct Lexer<'l> {
     code: &'l [char],
     index: usize,
-    lineno: usize,
-    charno: usize,
     nesting: usize,
 }
 
@@ -88,8 +68,6 @@ impl<'l> Lexer<'l> {
         Lexer {
             code,
             index: 0,
-            lineno: 0,
-            charno: 0,
             nesting: 0,
         }
     }
@@ -107,15 +85,6 @@ impl<'l> Lexer<'l> {
             return '\0';
         }
         let ch = self.code[self.index - 1];
-        match ch {
-            '\n' => {
-                self.lineno += 1;
-                self.charno = 0;
-            }
-            _ => {
-                self.charno += 1;
-            }
-        }
         ch
     }
 
@@ -155,20 +124,18 @@ impl<'l> Lexer<'l> {
         Token::Op(op)
     }
 
-    fn string(&mut self) -> Result<Token, Error> {
+    fn string(&mut self) -> Option<Token> {
         let mut string = String::new();
         self.next(); // skip "
         while self.peek() != '"' {
             if self.peek() == '\0' {
-                return Err(Error::EOF {
-                    lineno: self.lineno,
-                    charno: self.charno,
-                });
+                Logger::syntax_error("Encountered end of file while parsing string literal", self.index, string.len());
+                return None
             }
             string.push(self.next());
         }
         self.next(); // skip "
-        Ok(Token::StrLiteral(string))
+        Some(Token::StrLiteral(string))
     }
 
     fn special(&mut self) -> Token {
@@ -211,7 +178,7 @@ impl<'l> Lexer<'l> {
         Token::DocComment(doc_comment)
     }
 
-    pub fn go(&mut self) -> Result<Vec<Span>, Error> {
+    pub fn go(&mut self) -> Option<Vec<Span<Token>>> {
         let mut tokens = vec![];
         loop {
             match self.peek() {
@@ -257,18 +224,17 @@ impl<'l> Lexer<'l> {
                 ch if ch == '\n' => {
                     // token::proc doesn't matter, just needs to be
                     // something that doesn't trigger newline suppression
-                    if tokens.len() > 0 && tokens.last().unwrap().token == Token::Newline {
+                    if tokens.len() > 0 && tokens.last().unwrap().contents == Token::Newline {
                         self.next(); // skip consecutive newlines
                     } else {
                         match tokens
                             .last()
                             .unwrap_or(&Span {
-                                token: Token::Proc,
-                                lineno: 0,
-                                start: 0,
-                                end: 0,
+                                contents: Token::Proc,
+                                pos: 0,
+                                len: 0,
                             })
-                            .token
+                            .contents
                         {
                             Token::Op(_) | Token::Comma => self.next(),
                             _ if self.nesting != 0 => self.next(),
@@ -286,15 +252,14 @@ impl<'l> Lexer<'l> {
                 _ => unreachable!(),
             }
         }
-        Ok(tokens)
+        Some(tokens)
     }
 
-    fn spanned(&mut self, token: Token) -> Span {
+    fn spanned(&mut self, token: Token) -> Span<Token> {
         Span {
-            token: token.clone(),
-            lineno: self.lineno + 1,
-            start: 0, //self.charno - token_len(&token) + 1,
-            end: self.charno + 1,
+            contents: token.clone(),
+            pos: self.index,
+            len: token_len(&token),
         }
     }
 }
