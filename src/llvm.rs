@@ -155,6 +155,9 @@ impl<'g> Generator<'g> {
             Add(wrap) => self.add(typ, wrap),
             Subtract(wrap) => self.subtract(typ, wrap),
             Multiply(wrap) => self.multiply(typ, wrap),
+            IntDivide => self.int_divide(typ),
+
+            Divide => self.divide(typ),
 
             Compare(m) => self.compare(m, typ),
         }
@@ -450,6 +453,55 @@ impl<'g> Generator<'g> {
                         self.stack.pop().unwrap(),
                         self.cstr("tmpmul"),
                 ),
+                _ => unreachable!(),
+            };
+            self.stack.push(mul);
+        }
+    }
+
+    fn int_divide(&mut self, typ: Type) {
+        unsafe {
+            let mul = match typ {
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+                    LLVMBuildSDiv(
+                            self.builder,
+                            self.stack.pop().unwrap(),
+                            self.stack.pop().unwrap(),
+                            self.cstr("tmpdiv"),
+                    )
+                },
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                    LLVMBuildUDiv(
+                            self.builder,
+                            self.stack.pop().unwrap(),
+                            self.stack.pop().unwrap(),
+                            self.cstr("tmpdiv"),
+                    )
+                },
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => unreachable!(),
+                _ => unreachable!(),
+            };
+            self.stack.push(mul);
+        }
+    }
+
+    fn divide(&mut self, typ: Type) {
+        unsafe {
+            let mul = match typ {
+                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 |
+                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => unreachable!(),
+                Type::F32
+                    | Type::F64
+                    | Type::F128 => {
+                        LLVMBuildFDiv(
+                                self.builder,
+                                self.stack.pop().unwrap(),
+                                self.stack.pop().unwrap(),
+                                self.cstr("tmpdiv"),
+                        )
+                    },
                 _ => unreachable!(),
             };
             self.stack.push(mul);

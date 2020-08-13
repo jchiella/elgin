@@ -84,11 +84,12 @@ impl<'i> IRBuilder<'i> {
                     add_constraint(&mut constraints, type_to_return, proc.ret_type.clone());
                 }
 
-                Negate => {
+                Negate(_) => {
                     let t1 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), ins.typ.clone());
                 }
-                Add(_) | Subtract(_) | Multiply(_) => {
+                // TODO more specific constraints???
+                Add(_) | Subtract(_) | Multiply(_) | IntDivide | Divide => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
                     add_constraint(&mut constraints, t1.clone(), t2.clone());

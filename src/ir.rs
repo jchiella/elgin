@@ -57,6 +57,8 @@ pub enum InstructionType {
     Add(bool), 
     Subtract(bool),
     Multiply(bool),
+    IntDivide,
+    Divide,
 
     Compare(CompareType),
 }
@@ -335,10 +337,14 @@ impl<'i> IRBuilder<'i> {
                 "+" => InstructionType::Add(false),
                 "-" => InstructionType::Subtract(false),
                 "*" => InstructionType::Multiply(false),
+                "//" => InstructionType::IntDivide,
 
                 "+~" => InstructionType::Add(true),
                 "-~" => InstructionType::Subtract(true),
                 "*~" => InstructionType::Multiply(true),
+                "//" => InstructionType::IntDivide,
+
+                "/" => InstructionType::Divide,
 
                 "==" => InstructionType::Compare(CompareType::EQ),
                 "!=" => InstructionType::Compare(CompareType::NE),
