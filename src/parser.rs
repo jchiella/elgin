@@ -36,6 +36,8 @@ pub enum Type {
     NoReturn,
 
     Ptr(Box<Type>),
+
+    Array(usize, Box<Type>),
 }
 
 impl fmt::Debug for Type {
@@ -65,6 +67,7 @@ impl fmt::Debug for Type {
             Bool => write!(f, "bool"),
 
             Ptr(t) => write!(f, "*{:?}", t),
+            Array(size, t) => write!(f, "[{}]{:?}", size, t),
 
             Variable(n) => write!(f, "${}", n),
 
@@ -284,6 +287,17 @@ impl<'p> Parser<'p> {
                 self.next();
                 let content_type = self.ensure_type()?;
                 Ok(Type::Ptr(Box::new(content_type)))
+            },
+            Token::LBracket => {
+                self.next(); // skip the LBracket
+                if let Token::IntLiteral(size) = self.peek().token {
+                    self.next();
+                    self.ensure_next(Token::RBracket)?;
+                    let content_type = self.ensure_type()?; 
+                    Ok(Type::Array(size.parse().unwrap(), Box::new(content_type)))
+                } else {
+                    Err(Error::TypeError)
+                }
             },
             _ => {
                 Err(Error::ExpectedType {

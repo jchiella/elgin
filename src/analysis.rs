@@ -184,10 +184,15 @@ fn substitute_constraints(constraints: &Constraints, t1: &Type, t2: &Type) -> Co
 
 fn add_constraint(constraints: &mut Constraints, t1: Type, t2: Type) {
     println!("Trying to add constraint: {:?} == {:?}", t1.clone(), t2.clone());
+    // TODO Some of these constraints just shouldn't be permitted at all and should raise a type
+    // error. For example, you shouldn't be able to add a constraint i8 == f64
     if t1 == t2 {
         return;
     }
     if t1 == Type::StrLiteral || t2 == Type::StrLiteral {
+        return;
+    }
+    if t1 == Type::Undefined || t2 == Type::Undefined {
         return;
     }
     if let Type::Variable(_) = t2 {

@@ -182,7 +182,7 @@ impl<'g> Generator<'g> {
                     LLVMConstReal(self.llvm_type(&typ), s.parse().unwrap())
                 }
                 Type::Undefined => {
-                    LLVMConstInt(self.llvm_type(&Type::I64), 0xffff, 0) // super temporary
+                    LLVMGetUndef(self.llvm_type(&Type::I8))
                 }
                 Type::StrLiteral => {
                     LLVMBuildGlobalStringPtr(self.builder, self.cstr(&s), self.cstr("tmpstr"))
@@ -212,7 +212,11 @@ impl<'g> Generator<'g> {
             let alloca = LLVMBuildAlloca(self.builder, self.llvm_type(&typ), name);
             self.lookup.insert(s.clone(), alloca);
             let val = self.stack.pop().unwrap();
-            LLVMBuildStore(self.builder, val, alloca);
+            if LLVMIsUndef(val) == 0 {
+                LLVMBuildStore(self.builder, val, alloca);
+            } else {
+                LLVMBuildStore(self.builder, LLVMGetUndef(self.llvm_type(&typ)), alloca);
+            }
         }
     }
 
@@ -355,6 +359,8 @@ impl<'g> Generator<'g> {
                 Type::Bool => LLVMInt1TypeInContext(self.context),
 
                 Type::Ptr(t) => LLVMPointerType(self.llvm_type(&t), 0),
+                Type::Array(size, t) => LLVMArrayType(self.llvm_type(&t), *size as u32),
+
                 Type::Undefined => LLVMVoidTypeInContext(self.context),
                 _ => unreachable!(),
             }

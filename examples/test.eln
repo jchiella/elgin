@@ -1,5 +1,4 @@
 proc main(): i32 {
-    var s: *i8 = "Hi there!"
-    puts(s)
+    var arr: [10]i32
     return 0
 }
