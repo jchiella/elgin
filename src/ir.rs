@@ -227,11 +227,10 @@ impl<'i> IRBuilder<'i> {
                 typ,
                 value,
             } => self.var_statement(name, typ, value, node.pos, node.len)?,
-            ConstStatement {
-                name,
-                typ,
-                value,
-            } => unreachable!(),
+            ConstStatement { .. } => {
+                Logger::syntax_error("Found const statement not at top level. This feature is NYI.", node.pos, node.len);
+                return None;
+            },
             AssignStatement {
                 name,
                 value,
@@ -292,13 +291,12 @@ impl<'i> IRBuilder<'i> {
                 "+" => InstructionType::Add(false),
                 "-" => InstructionType::Subtract(false),
                 "*" => InstructionType::Multiply(false),
-                "//" => InstructionType::IntDivide,
 
                 "+~" => InstructionType::Add(true),
                 "-~" => InstructionType::Subtract(true),
                 "*~" => InstructionType::Multiply(true),
-                "//" => InstructionType::IntDivide,
 
+                "//" => InstructionType::IntDivide,
                 "/" => InstructionType::Divide,
 
                 "==" => InstructionType::Compare(CompareType::EQ),
@@ -426,10 +424,47 @@ impl<'i> IRBuilder<'i> {
         pos: usize,
         len: usize,
     ) -> IRResult {
-        todo!()
+        let mut res = vec![];
+        let cond_label = self.next_label_id();
+        let body_label = self.next_label_id();
+        let end_label = self.next_label_id();
+        let mut blocks_ending_in_return = 1;
+
+        res.push(spanned(Instruction {
+            ins: InstructionType::Jump(cond_label),
+            typ: Type::Undefined,
+        }, pos, len));
+        res.push(spanned(Instruction {
+            ins: InstructionType::Label(cond_label),
+            typ: Type::Undefined,
+        }, pos, len));
+        res.append(&mut self.node(&condition)?);
+        res.push(spanned(Instruction {
+            ins: InstructionType::Branch(body_label, end_label),
+            typ: Type::NoReturn,
+        }, pos, len));
+        res.push(spanned(Instruction {
+            ins: InstructionType::Label(body_label),
+            typ: Type::Undefined,
+        }, pos, len));
+        res.append(&mut self.node(&body)?);
+        if res.last().unwrap().contents.ins != InstructionType::Return {
+            blocks_ending_in_return -= 1;
+            res.push(spanned(Instruction {
+                ins: InstructionType::Jump(cond_label),
+                typ: Type::Undefined,
+            }, pos, len));
+        }
+        if blocks_ending_in_return < 2 {
+            res.push(spanned(Instruction {
+                ins: InstructionType::Label(end_label),
+                typ: Type::Undefined,
+            }, pos, len));
+        }
+        Some(res)
     }
 
-    fn block(&mut self, nodes: Vec<Span<Node>>, pos: usize, len: usize) -> IRResult {
+    fn block(&mut self, nodes: Vec<Span<Node>>, _pos: usize, _len: usize) -> IRResult {
         let mut res = vec![];
         for node in nodes {
             res.append(&mut self.node(&node)?);

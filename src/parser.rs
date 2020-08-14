@@ -337,7 +337,7 @@ impl<'p> Parser<'p> {
         self.ensure_next(Token::Var)?;
         let name = self.ensure_ident()?;
         let typ;
-        if self.try_next(Token::Colon).is_none() {
+        if self.try_next(Token::Colon).is_some() {
             typ = self.ensure_type()?;
         } else {
             typ = Type::Unknown;

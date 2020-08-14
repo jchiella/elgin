@@ -45,19 +45,19 @@ impl<'i> IRBuilder<'i> {
                 }
                 Store(var) => {
                     let typ = stack.pop().unwrap();
-                    add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
-                    add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
+                    self.add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
+                    self.add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
                 }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
                     let var_type = ins.contents.typ.clone();
                     let scope_index = self.scopes.len() - 1;
                     self.scopes[scope_index].insert(var, var_type.clone());
-                    add_constraint(&mut constraints, var_type, content_type);
+                    self.add_constraint(&mut constraints, var_type, content_type);
                 }
 
                 Branch(_, _) => {
-                    add_constraint(
+                    self.add_constraint(
                         &mut constraints,
                         stack.pop().unwrap(),
                         Type::Bool,
@@ -67,10 +67,10 @@ impl<'i> IRBuilder<'i> {
                 Label(_) => (),
 
                 Call(proc_name) => {
-                    let proc = self.locate_proc(&proc_name)?;
+                    let proc = self.locate_proc(&proc_name)?.clone();
                     let arg_count = proc.arg_types.len();
                     for t in &proc.arg_types {
-                        add_constraint(
+                        self.add_constraint(
                             &mut constraints,
                             stack.remove(stack.len() - arg_count),
                             t.clone(),
@@ -81,28 +81,28 @@ impl<'i> IRBuilder<'i> {
                 Return => {
                     let type_to_return = stack.pop().unwrap();
                     //let ret_type = ins.typ.clone();
-                    add_constraint(&mut constraints, type_to_return, proc.ret_type.clone());
+                    self.add_constraint(&mut constraints, type_to_return, proc.ret_type.clone());
                 }
 
                 Negate(_) => {
                     let t1 = stack.pop().unwrap();
-                    add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
+                    self.add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
                 }
                 // TODO more specific constraints???
                 Add(_) | Subtract(_) | Multiply(_) | IntDivide | Divide => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
-                    add_constraint(&mut constraints, t1.clone(), t2.clone());
-                    add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
-                    add_constraint(&mut constraints, t2.clone(), ins.contents.typ.clone());
+                    self.add_constraint(&mut constraints, t1.clone(), t2.clone());
+                    self.add_constraint(&mut constraints, t1.clone(), ins.contents.typ.clone());
+                    self.add_constraint(&mut constraints, t2.clone(), ins.contents.typ.clone());
                     stack.push(ins.contents.typ.clone());
                 }
 
                 Compare(_) => {
                     let t1 = stack.pop().unwrap();
                     let t2 = stack.pop().unwrap();
-                    add_constraint(&mut constraints, t1.clone(), t2.clone());
-                    add_constraint(
+                    self.add_constraint(&mut constraints, t1.clone(), t2.clone());
+                    self.add_constraint(
                         &mut constraints,
                         ins.contents.typ.clone(),
                         Type::Bool,
@@ -140,6 +140,43 @@ impl<'i> IRBuilder<'i> {
             ret_type: proc.ret_type.clone(),
             body: new_body,
         })
+    }
+
+
+    fn add_constraint(&mut self, constraints: &mut Constraints, t1in: Type, t2in: Type) {
+        println!("Trying to add constraint: {:?} == {:?}", t1in.clone(), t2in.clone());
+        // TODO Some of these constraints just shouldn't be permitted at all and should raise a type
+        // error. For example, you shouldn't be able to add a constraint i8 == f64
+        let t1 = if t1in == Type::Unknown {
+            Type::Variable(self.next_type_var())
+        } else {
+            t1in
+        };
+        let t2 = if t2in == Type::Unknown {
+            Type::Variable(self.next_type_var())
+        } else {
+            t2in
+        };
+        if t1 == t2 {
+            return;
+        }
+        if t1 == Type::StrLiteral || t2 == Type::StrLiteral {
+            return;
+        }
+        if t1 == Type::Undefined || t2 == Type::Undefined {
+            return;
+        }
+        if let Type::Variable(_) = t2 {
+            constraints.push((t2, t1));
+        } else {
+            if t2 == Type::IntLiteral
+                || t2 == Type::FloatLiteral
+                || t2 == Type::StrLiteral {
+                constraints.push((t2, t1));
+            } else {
+                constraints.push((t1, t2));
+            }
+        }
     }
 }
 
@@ -184,28 +221,3 @@ fn substitute_constraints(constraints: &Constraints, t1: &Type, t2: &Type) -> Co
     new_constraints
 }
 
-fn add_constraint(constraints: &mut Constraints, t1: Type, t2: Type) {
-    println!("Trying to add constraint: {:?} == {:?}", t1.clone(), t2.clone());
-    // TODO Some of these constraints just shouldn't be permitted at all and should raise a type
-    // error. For example, you shouldn't be able to add a constraint i8 == f64
-    if t1 == t2 {
-        return;
-    }
-    if t1 == Type::StrLiteral || t2 == Type::StrLiteral {
-        return;
-    }
-    if t1 == Type::Undefined || t2 == Type::Undefined {
-        return;
-    }
-    if let Type::Variable(_) = t2 {
-        constraints.push((t2, t1));
-    } else {
-        if t2 == Type::IntLiteral
-            || t2 == Type::FloatLiteral
-            || t2 == Type::StrLiteral {
-            constraints.push((t2, t1));
-        } else {
-            constraints.push((t1, t2));
-        }
-    }
-}

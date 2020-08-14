@@ -513,8 +513,11 @@ impl<'g> Generator<'g> {
         unsafe {
             use llvm::LLVMIntPredicate::*;
             use llvm::LLVMRealPredicate::*;
-            let cmp = match typ {
-                Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+            use llvm::LLVMTypeKind::*;
+            let v1 = self.stack.pop().unwrap();
+            let v2 = self.stack.pop().unwrap();
+            let cmp = match LLVMGetTypeKind(LLVMTypeOf(v1)) {
+                LLVMIntegerTypeKind => {
                     LLVMBuildICmp(
                         self.builder,
                         match comptype {
@@ -525,30 +528,28 @@ impl<'g> Generator<'g> {
                             CompareType::LE => LLVMIntSLE,
                             CompareType::GE => LLVMIntSGE,
                         },
-                        self.stack.pop().unwrap(),
-                        self.stack.pop().unwrap(),
+                        v2,
+                        v1,
                         self.cstr("tmpcmp"),
                     )
                 },
-                Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
-                    LLVMBuildICmp(
-                        self.builder,
-                        match comptype {
-                            CompareType::EQ => LLVMIntEQ,
-                            CompareType::NE => LLVMIntNE,
-                            CompareType::LT => LLVMIntUGT,
-                            CompareType::GT => LLVMIntUGT,
-                            CompareType::LE => LLVMIntULE,
-                            CompareType::GE => LLVMIntUGE,
-                        },
-                        self.stack.pop().unwrap(),
-                        self.stack.pop().unwrap(),
-                        self.cstr("tmpcmp"),
-                    )
-                },
-                Type::F32
-                    | Type::F64
-                    | Type::F128 => {
+                //Type::N8 | Type::N16 | Type::N32 | Type::N64 | Type::N128 => {
+                //    LLVMBuildICmp(
+                //        self.builder,
+                //        match comptype {
+                //            CompareType::EQ => LLVMIntEQ,
+                //            CompareType::NE => LLVMIntNE,
+                //            CompareType::LT => LLVMIntUGT,
+                //            CompareType::GT => LLVMIntUGT,
+                //            CompareType::LE => LLVMIntULE,
+                //            CompareType::GE => LLVMIntUGE,
+                //        },
+                //        self.stack.pop().unwrap(),
+                //        self.stack.pop().unwrap(),
+                //        self.cstr("tmpcmp"),
+                //    )
+                //},
+                LLVMFloatTypeKind => {
                         LLVMBuildFCmp(
                             self.builder,
                             match comptype {
@@ -559,12 +560,12 @@ impl<'g> Generator<'g> {
                                 CompareType::LE => LLVMRealOLE,
                                 CompareType::GE => LLVMRealOGE,
                             },
-                            self.stack.pop().unwrap(),
-                            self.stack.pop().unwrap(),
+                            v2,
+                            v1,
                             self.cstr("tmpcmp"),
                         )
                     }
-                _ => unreachable!(),
+                t => unreachable!("{:?}", t),
             };
             self.stack.push(cmp);
         }

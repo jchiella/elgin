@@ -16,7 +16,7 @@ impl<T: fmt::Debug> fmt::Debug for Span<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:?} @ position {}, of lenght {}",
+            "{:?} @ position {}, of length {}",
             self.contents, self.pos, self.len,
         )
     }

@@ -28,13 +28,20 @@ fn file() {
     let chars = &input.chars().collect::<Vec<_>>()[..];
 
     let mut lexer = lexer::Lexer::new(chars);
-    let lex_results = lexer.go().unwrap();
+    let lex_results_option = lexer.go();
+    println!("______________________");
+    println!("lex errors:");
+    println!("{:#?}", errors::ERRORS.lock().unwrap());
+    let lex_results = lex_results_option.unwrap();
     println!("______________________");
     println!("lexer output:");
     lex_results.iter().map(|t| println!("{:?}", t)).for_each(drop);
 
     let mut parser = parser::Parser::new(&lex_results);
     let parse_results = parser.go();
+    println!("______________________");
+    println!("parse errors:");
+    println!("{:#?}", errors::ERRORS.lock().unwrap());
     println!("______________________");
     println!("parser output:");
     println!("{:#?}", parse_results);
@@ -43,12 +50,19 @@ fn file() {
     let mut irbuilder = ir::IRBuilder::new(&unwrapped);
     let ir_results = irbuilder.go();
     println!("______________________");
+    println!("IR gen errors:");
+    println!("{:#?}", errors::ERRORS.lock().unwrap());
+    println!("______________________");
     println!("IR output:");
     println!("{:#?}", *ir_results.unwrap());
 
     println!("______________________");
     println!("analysis output:");
-    irbuilder.analyze().unwrap();
+    let analysis_option = irbuilder.analyze();
+    println!("______________________");
+    println!("analysis errors:");
+    println!("{:#?}", errors::ERRORS.lock().unwrap());
+    analysis_option.unwrap();
 
     let mut generator = llvm::Generator::new(&irbuilder.procs, "chi", &env::args().nth(1).unwrap());
     generator.go();
