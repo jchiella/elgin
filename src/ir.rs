@@ -339,7 +339,7 @@ impl<'i> IRBuilder<'i> {
         pos: usize,
         len: usize,
     ) -> IRResult {
-        todo!()
+        todo!("{:?} {:?} {:?} {:?}", op, left, pos, len);
     }
 
     fn index_op(
@@ -349,7 +349,7 @@ impl<'i> IRBuilder<'i> {
         pos: usize,
         len: usize,
     ) -> IRResult {
-        todo!()
+        todo!("{:?} {:?} {:?} {:?}", object, index, pos, len);
     }
 
     fn variable_ref(&mut self, name: String, pos: usize, len: usize) -> IRResult {

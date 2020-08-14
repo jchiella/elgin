@@ -63,7 +63,6 @@ impl<'g> Generator<'g> {
     }
 
     pub fn go(&mut self) {
-        //self.build_header();
         // Create declarations first
         for proc in self.procs {
             unsafe {
@@ -111,28 +110,6 @@ impl<'g> Generator<'g> {
             for ins in &proc.body {
                 self.ins(&ins.clone());
             }
-        }
-    }
-
-    fn build_header(&mut self) {
-        unsafe {
-            let mut puts_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
-            let puts_type = LLVMFunctionType(
-                LLVMInt32TypeInContext(self.context),
-                puts_arg_types.as_mut_ptr(),
-                1,
-                0,
-            );
-            LLVMAddFunction(self.module, self.cstr("puts"), puts_type);
-
-            let mut printf_arg_types = vec![LLVMPointerType(LLVMInt8Type(), 0)];
-            let printf_type = LLVMFunctionType(
-                LLVMInt32TypeInContext(self.context),
-                printf_arg_types.as_mut_ptr(),
-                1,
-                1,
-            );
-            LLVMAddFunction(self.module, self.cstr("printf"), printf_type);
         }
     }
 
@@ -509,7 +486,7 @@ impl<'g> Generator<'g> {
         }
     }
 
-    fn compare(&mut self, comptype: CompareType, typ: Type) {
+    fn compare(&mut self, comptype: CompareType, _typ: Type) {
         unsafe {
             use llvm::LLVMIntPredicate::*;
             use llvm::LLVMRealPredicate::*;
@@ -624,19 +601,6 @@ impl<'g> Generator<'g> {
                 Type::Undefined => LLVMVoidTypeInContext(self.context),
                 _ => unreachable!(),
             }
-        }
-    }
-
-    pub fn to_cstring(&self) -> CString {
-        unsafe {
-            let llvm_ir_ptr = LLVMPrintModuleToString(self.module);
-            let llvm_ir = CStr::from_ptr(llvm_ir_ptr as *const _);
-
-            let module_string = CString::new(llvm_ir.to_bytes()).unwrap();
-
-            LLVMDisposeMessage(llvm_ir_ptr);
-
-            module_string
         }
     }
 

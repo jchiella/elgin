@@ -25,7 +25,7 @@ impl<T: fmt::Debug> fmt::Debug for Span<T> {
 #[derive(Debug)]
 pub enum ErrorType {
     SyntaxError,
-    TypeError,
+    //TypeError,
     NameError,
 }
 
@@ -61,10 +61,10 @@ impl Logger {
         Self::log(NameError, msg, pos, len);
     }
 
-    #[inline]
-    pub fn type_error(msg: &str, pos: usize, len: usize) {
-        Self::log(TypeError, msg, pos, len);
-    }
+    //#[inline]
+    //pub fn type_error(msg: &str, pos: usize, len: usize) {
+    //    Self::log(TypeError, msg, pos, len);
+    //}
 
     #[inline]
     pub fn syntax_error(msg: &str, pos: usize, len: usize) {

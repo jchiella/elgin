@@ -8,6 +8,7 @@ mod ir;
 mod lexer;
 mod llvm;
 mod parser;
+mod astgen;
 
 use std::io::prelude::*;
 use std::{env, fs};
