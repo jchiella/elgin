@@ -18,6 +18,7 @@ pub struct IRBuilder<'i> {
     available_label_id: usize,
     pub scopes: Vec<Scope>,
     pub procs: Vec<IRProc>, 
+    pub consts: HashMap<String, Span<Node>>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +94,7 @@ impl<'i> IRBuilder<'i> {
             available_label_id: 0,
             scopes: vec![],
             procs: vec![],
+            consts: HashMap::new(),
         }
     }
 
@@ -141,7 +143,7 @@ impl<'i> IRBuilder<'i> {
                     typ,
                     value,
                 } => {
-                    todo!()
+                    self.const_statement(name, typ, value, node.pos, node.len);
                 }
                 Node::ProcStatement {
                     name,
@@ -229,7 +231,7 @@ impl<'i> IRBuilder<'i> {
                 name,
                 typ,
                 value,
-            } => self.const_statement(name, typ, value, node.pos, node.len)?,
+            } => unreachable!(),
             AssignStatement {
                 name,
                 value,
@@ -353,6 +355,11 @@ impl<'i> IRBuilder<'i> {
     }
 
     fn variable_ref(&mut self, name: String, pos: usize, len: usize) -> IRResult {
+        if self.consts.contains_key(&name) {
+            let constant = self.consts[&name].clone();
+            return self.node(&constant);
+        }
+
         let typ = self.locate_var(&name)?;
         Some(vec![spanned(Instruction {
             ins: InstructionType::Load(name),
@@ -484,12 +491,14 @@ impl<'i> IRBuilder<'i> {
     fn const_statement(
         &mut self,
         name: String,
-        typ: Type,
+        _typ: Type,
         value: Box<Span<Node>>,
-        pos: usize,
-        len: usize,
-    ) -> IRResult {
-        todo!()
+        _pos: usize,
+        _len: usize,
+    ) -> Option<()> {
+        // TODO: Actual verification that this is a const expression
+        self.consts.insert(name, *value.clone());
+        Some(())
     }
 
     fn proc_statement(
@@ -546,15 +555,16 @@ impl<'i> IRBuilder<'i> {
     }
 
     pub fn locate_var(&self, name: &String) -> Option<Type> {
-        let mut scope_index = self.scopes.len() - 1;
-        while scope_index >= 0 {
-            if let Some(typ) = self.scopes[scope_index].get(name) {
+        //let mut scope_index = self.scopes.len() - 1;
+        //while scope_index >= 0 {
+        for scope in self.scopes.iter().rev() {
+            if let Some(typ) = scope.get(name) {
                 return Some(typ.clone());
             }
-            if scope_index == 0 {
-                break;
-            }
-            scope_index -= 1
+            //if scope_index == 0 {
+            //    break;
+            //}
+            //scope_index -= 1
         }
 
         Logger::name_error(
