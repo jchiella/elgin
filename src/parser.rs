@@ -130,6 +130,15 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn try_next(&mut self, t: Token) -> Option<()> {
+        if self.peek().contents == t {
+            self.next();
+            Some(())
+        } else {
+            None
+        }
+    }
+
     fn ensure_ident(&mut self) -> Option<String> {
         if let Token::Ident(id) = self.peek().contents.clone() {
             self.next();
@@ -308,9 +317,9 @@ impl<'p> Parser<'p> {
         let mut nodes = vec![];
         self.ensure_next(Token::LBrace)?;
         loop {
-            let _ = self.ensure_next(Token::Newline);
+            let _ = self.try_next(Token::Newline);
             nodes.push(self.statement()?);
-            if self.ensure_next(Token::Newline).is_none() {
+            if self.try_next(Token::Newline).is_none() {
                 self.ensure_next(Token::RBrace)?;
                 break;
             }
@@ -328,7 +337,7 @@ impl<'p> Parser<'p> {
         self.ensure_next(Token::Var)?;
         let name = self.ensure_ident()?;
         let typ;
-        if self.ensure_next(Token::Colon).is_none() {
+        if self.try_next(Token::Colon).is_none() {
             typ = self.ensure_type()?;
         } else {
             typ = Type::Unknown;
@@ -366,7 +375,7 @@ impl<'p> Parser<'p> {
         self.ensure_next(Token::Const)?;
         let name = self.ensure_ident()?;
         let typ;
-        if self.ensure_next(Token::Colon).is_some() {
+        if self.try_next(Token::Colon).is_some() {
             typ = self.ensure_type()?;
         } else {
             typ = Type::Unknown;
@@ -399,7 +408,7 @@ impl<'p> Parser<'p> {
         }
         self.ensure_next(Token::RParen)?;
         let ret_type;
-        if self.ensure_next(Token::Colon).is_some() {
+        if self.try_next(Token::Colon).is_some() {
             ret_type = self.ensure_type()?;
         } else {
             ret_type = Type::Undefined;
