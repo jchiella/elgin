@@ -67,7 +67,6 @@ impl fmt::Debug for Type {
 
             Variable(n) => write!(f, "${}", n),
 
-            Unknown => write!(f, "UNKNOWN"),
             Undefined => write!(f, "undefined"),
             NoReturn => write!(f, "noreturn"),
         }?;

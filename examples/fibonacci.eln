@@ -1,0 +1,13 @@
+# Simple recursive fibonnaci function example
+
+proc main(): i32 {
+    return fibonnaci(10) 
+}
+
+proc fibonnaci(n: i32): i32 {
+    if n < 2 {
+        return 1
+    } else {
+        return fibonnaci(n - 1) + fibonnaci(n - 2)
+    }
+}
