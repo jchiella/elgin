@@ -32,6 +32,7 @@ pub enum Token {
     Var,
     Const,
     Return,
+    Use,
 
     // special characters
     LParen,
@@ -188,6 +189,15 @@ impl<'l> Lexer<'l> {
                         self.spanned(str_to_keyword(&id).unwrap_or_else(|| str_to_ident(&id))),
                     );
                 }
+                '.' => {
+                    if is_number(self.code[self.index + 1], false) {
+                        let number = self.number();
+                        tokens.push(self.spanned(number));
+                    } else {
+                        tokens.push(self.spanned(Token::Op(".".to_owned())));
+                        self.next();
+                    }
+                }
                 ch if is_number(ch, false) => {
                     let number = self.number();
                     tokens.push(self.spanned(number));
@@ -300,6 +310,7 @@ fn str_to_keyword(s: &str) -> Option<Token> {
         "var" => Token::Var,
         "const" => Token::Const,
         "return" => Token::Return,
+        "use" => Token::Use,
         _ => return None,
     })
 }
@@ -329,6 +340,7 @@ fn token_len(t: &Token) -> usize {
         Token::Var => 3,
         Token::Const => 5,
         Token::Return => 6,
+        Token::Use => 3,
 
         Token::LParen
         | Token::RParen

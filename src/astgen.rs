@@ -71,6 +71,9 @@ pub enum Node {
     ReturnStatement {
         val: Box<Span<Node>>,
     },
+    UseStatement {
+        path: String,
+    },
 }
 
 fn spanned(node: Node, pos: usize, len: usize) -> Span<Node> {
@@ -114,6 +117,7 @@ impl<'p> Parser<'p> {
             Token::Const => self.const_statement()?,
             Token::Proc => self.proc_statement()?,
             Token::Return => self.return_statement()?,
+            Token::Use => self.use_statement()?,
             Token::Ident(_) if self.tokens[self.index + 1].contents == Token::Equals => {
                 self.assign_statement()?
             }
@@ -300,6 +304,27 @@ impl<'p> Parser<'p> {
         let val = self.expr(0)?;
         Some(spanned(Node::ReturnStatement {
             val: Box::new(val),
+        }, 0, 0))
+    }
+
+    fn use_statement(&mut self) -> Option<Span<Node>> {
+        self.ensure_next(Token::Use)?;
+        let mut path = String::new();
+        loop {
+            path.push_str(&self.ensure_ident()?);
+            if let Token::Op(op) = self.peek().contents {
+                if op == ".".to_owned() {
+                    self.next();
+                    path.push('.');
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        Some(spanned(Node::UseStatement {
+            path,
         }, 0, 0))
     }
 
