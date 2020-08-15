@@ -7,7 +7,6 @@ use crate::errors::Span;
 
 use std::collections::HashMap;
 
-//type Constraints = HashMap<Type, Type>;
 type Constraints = Vec<(Type, Type)>;
 
 impl<'i> IRBuilder<'i> {
@@ -35,7 +34,6 @@ impl<'i> IRBuilder<'i> {
         let mut constraints = Vec::new();
         let mut stack = vec![];
         for ins in &proc.body {
-            dbg!(ins.contents.ins.clone());
             match ins.contents.ins.clone() {
                 Push(_) => {
                     stack.push(ins.contents.typ.clone());
@@ -143,20 +141,10 @@ impl<'i> IRBuilder<'i> {
     }
 
 
-    fn add_constraint(&mut self, constraints: &mut Constraints, t1in: Type, t2in: Type) {
-        println!("Trying to add constraint: {:?} == {:?}", t1in.clone(), t2in.clone());
+    fn add_constraint(&mut self, constraints: &mut Constraints, t1: Type, t2: Type) {
+        println!("Trying to add constraint: {:?} == {:?}", t1.clone(), t2.clone());
         // TODO Some of these constraints just shouldn't be permitted at all and should raise a type
         // error. For example, you shouldn't be able to add a constraint i8 == f64
-        let t1 = if t1in == Type::Unknown {
-            Type::Variable(self.next_type_var())
-        } else {
-            t1in
-        };
-        let t2 = if t2in == Type::Unknown {
-            Type::Variable(self.next_type_var())
-        } else {
-            t2in
-        };
         if t1 == t2 {
             return;
         }
@@ -166,6 +154,7 @@ impl<'i> IRBuilder<'i> {
         if t1 == Type::Undefined || t2 == Type::Undefined {
             return;
         }
+        println!("After transformation: {:?} == {:?}", t1.clone(), t2.clone());
         if let Type::Variable(_) = t2 {
             constraints.push((t2, t1));
         } else {
@@ -187,7 +176,6 @@ fn substitute_proc_body(body: Vec<Span<Instruction>>, t1: &Type, t2: &Type) -> V
         new_body.push(spanned(Instruction {
             ins: ins.contents.ins,
             typ: if ins.contents.typ.clone() == t1.clone() {
-                println!("{:?} => {:?}", t1.clone(), t2.clone());
                 t2.clone()
             //} else if ins.typ.clone() == t2.clone() {
             //    t1.clone()

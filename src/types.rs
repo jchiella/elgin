@@ -28,7 +28,6 @@ pub enum Type {
 
     Variable(usize),
 
-    Unknown,
     Undefined,
     NoReturn,
 

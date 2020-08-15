@@ -6,7 +6,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 
 use crate::ir::{CompareType, IRProc, Instruction, InstructionType};
 use crate::types::Type;
@@ -228,10 +228,10 @@ impl<'g> Generator<'g> {
 
     fn return_(&mut self, typ: Type) {
         unsafe {
-            if let Type::Undefined = dbg!(typ) {
+            if let Type::Undefined = typ {
                 LLVMBuildRetVoid(self.builder);
             } else {
-                LLVMBuildRet(self.builder, dbg!(self.stack.pop().unwrap()));
+                LLVMBuildRet(self.builder, self.stack.pop().unwrap());
             }
         }
     }

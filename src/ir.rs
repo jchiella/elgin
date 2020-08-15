@@ -3,7 +3,7 @@
 //! It is then converted into LLVM IR in the codegen phase
 
 use crate::errors::{Logger, Span};
-use crate::parser::Node;
+use crate::astgen::Node;
 use crate::types::Type;
 
 use std::collections::HashMap;
@@ -87,10 +87,10 @@ pub fn spanned(ins: Instruction, pos: usize, len: usize) -> Span<Instruction> {
 }
 
 impl<'i> IRBuilder<'i> {
-    pub fn new(ast: &'i [Span<Node>]) -> Self {
+    pub fn new(ast: &'i [Span<Node>], available_type_var: usize) -> Self {
         IRBuilder {
             ast,
-            available_type_var: 0,
+            available_type_var,
             available_label_id: 0,
             scopes: vec![],
             procs: vec![],
@@ -180,7 +180,7 @@ impl<'i> IRBuilder<'i> {
     }
 
     fn node(&mut self, node: &Span<Node>) -> IRResult { 
-        use crate::parser::Node::*;
+        use crate::astgen::Node::*;
         Some(match node.clone().contents {
             Literal {
                 typ,

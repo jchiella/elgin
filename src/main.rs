@@ -3,12 +3,13 @@ extern crate lazy_static;
 
 mod errors;
 mod types;
-mod analysis;
-mod ir;
+
 mod lexer;
-mod llvm;
 mod parser;
 mod astgen;
+mod ir;
+mod analysis;
+mod llvm;
 
 use std::io::prelude::*;
 use std::{env, fs};
@@ -48,7 +49,7 @@ fn file() {
     println!("{:#?}", parse_results);
 
     let unwrapped = parse_results.unwrap();
-    let mut irbuilder = ir::IRBuilder::new(&unwrapped);
+    let mut irbuilder = ir::IRBuilder::new(&unwrapped, parser.available_type_var);
     let ir_results = irbuilder.go();
     println!("______________________");
     println!("IR gen errors:");
@@ -65,7 +66,7 @@ fn file() {
     println!("{:#?}", errors::ERRORS.lock().unwrap());
     analysis_option.unwrap();
 
-    let mut generator = llvm::Generator::new(&irbuilder.procs, "chi", &env::args().nth(1).unwrap());
+    let mut generator = llvm::Generator::new(&irbuilder.procs, "elgin", &env::args().nth(1).unwrap());
     generator.go();
     println!("______________________");
     println!("codegen output:");

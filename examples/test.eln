@@ -1,5 +1,5 @@
 proc main(): i32 {
-    var x: i32 = 0
+    var x = 0
     while x < 10 {
         puts("Woop!")
         x = x + 1

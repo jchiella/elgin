@@ -7,7 +7,7 @@ entry:
   %n = alloca i32
   store i32 %0, i32* %n
   %tmpload = load i32, i32* %n
-  %tmpcmp = icmp eq i32 0, %tmpload
+  %tmpcmp = icmp eq i32 %tmpload, 0
   br i1 %tmpcmp, label %lbl0, label %lbl1
 
 lbl0:                                             ; preds = %entry
@@ -16,9 +16,9 @@ lbl0:                                             ; preds = %entry
 lbl1:                                             ; preds = %entry
   %tmpload1 = load i32, i32* %n
   %tmpload2 = load i32, i32* %n
-  %tmpsub = sub i32 %tmpload2, 1
+  %tmpsub = sub nsw i32 %tmpload2, 1
   %tmpcall = call i32 @factorial(i32 %tmpsub)
-  %tmpmul = mul i32 %tmpcall, %tmpload1
+  %tmpmul = mul nsw i32 %tmpcall, %tmpload1
   ret i32 %tmpmul
 }
 
