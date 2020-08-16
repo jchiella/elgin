@@ -122,6 +122,8 @@ impl<'g> Generator<'g> {
             Store(s) => self.store(s, typ),
             Allocate(s) => self.allocate(s, typ),
 
+            Index => self.index(typ),
+
             Branch(b, e) => self.branch(b, e),
             Jump(l) => self.jump(l),
             Label(l) => self.label(l),
@@ -210,6 +212,19 @@ impl<'g> Generator<'g> {
             } else {
                 LLVMBuildStore(self.builder, LLVMGetUndef(self.llvm_type(&typ)), alloca);
             }
+        }
+    }
+
+    fn index(&mut self, _typ: Type) {
+        unsafe {
+            let index = self.stack.pop().unwrap();
+            let object = self.stack.pop().unwrap();
+            let zero = LLVMConstInt(LLVMInt32TypeInContext(self.context), 0, 0);
+            let pointer = LLVMGetOperand(object, 0); // semi-temporary workaround
+            let mut indices = vec![zero, index];
+            let gep = LLVMBuildGEP(self.builder, pointer, indices.as_mut_ptr(), indices.len() as u32, self.cstr("tmpgep"));
+            let ld = LLVMBuildLoad(self.builder, gep, self.cstr("tmpload"));
+            self.stack.push(ld);
         }
     }
 

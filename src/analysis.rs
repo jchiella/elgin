@@ -21,7 +21,8 @@ impl<'i> IRBuilder<'i> {
                 scope.insert(self.procs[index].args[i].clone(), arg_type.clone());
             }
             let proc = self.procs[index].clone();
-            let constraints = self.gen_constraints(&proc)?;
+            let mut constraints = self.gen_constraints(&proc)?;
+            add_literal_constaints(&mut constraints, &mut self.procs);
             new_procs.push(self.solve_constraints(&proc, &constraints)?);
             index += 1;
         }
@@ -52,6 +53,16 @@ impl<'i> IRBuilder<'i> {
                     let scope_index = self.scopes.len() - 1;
                     self.scopes[scope_index].insert(var, var_type.clone());
                     self.add_constraint(&mut constraints, var_type, content_type);
+                }
+
+                Index => {
+                    let _index_type = stack.pop().unwrap();
+                    let object_type = stack.pop().unwrap();
+                    if let Type::Array(_, t) = object_type {
+                        stack.push(*t);
+                    } else {
+                        panic!();
+                    }
                 }
 
                 Branch(_, _) => {
@@ -209,3 +220,31 @@ fn substitute_constraints(constraints: &Constraints, t1: &Type, t2: &Type) -> Co
     new_constraints
 }
 
+fn add_literal_constaints(constraints: &mut Constraints, procs: &mut Vec<IRProc>) {
+    let mut has_int_literal = false;
+    let mut has_float_literal = false;
+    let mut has_str_literal = false;
+    for proc in procs {
+        for ins in &proc.body {
+            if ins.contents.typ == Type::IntLiteral {
+                has_int_literal = true;
+
+            } else if ins.contents.typ == Type::FloatLiteral {
+                has_float_literal = true;
+
+            } else if ins.contents.typ == Type::StrLiteral {
+                has_str_literal = true;
+            }
+        }
+    }
+
+    if has_int_literal {
+        constraints.push((Type::IntLiteral, Type::I32));
+    }
+    if has_float_literal {
+        constraints.push((Type::FloatLiteral, Type::F64));
+    }
+    //if has_str_literal {
+    //    constraints.push((Type::StrLiteral, Type::Ptr(Box::new(Type::I8))));
+    //}
+}

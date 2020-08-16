@@ -47,6 +47,8 @@ pub enum InstructionType {
     Store(String),    // pops a value from the stack into a variable
     Allocate(String), // creates a new local variable and gives it the top value of the stack
 
+    Index,            // pops an index and then an object and indexes in
+
     Branch(usize, usize), // conditional branch with if body and else body
     Jump(usize),          // unconditional jump
 
@@ -349,7 +351,15 @@ impl<'i> IRBuilder<'i> {
         pos: usize,
         len: usize,
     ) -> IRResult {
-        todo!("{:?} {:?} {:?} {:?}", object, index, pos, len);
+        let mut ins = vec![];
+        let mut obj = self.node(&object)?;
+        ins.append(&mut obj); 
+        ins.append(&mut self.node(&index)?);
+        ins.push(spanned(Instruction {
+            ins: InstructionType::Index,
+            typ: Type::Variable(self.next_type_var()),
+        }, pos, len));
+        Some(ins)
     }
 
     fn variable_ref(&mut self, name: String, pos: usize, len: usize) -> IRResult {
