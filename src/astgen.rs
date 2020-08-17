@@ -61,6 +61,11 @@ pub enum Node {
         name: String,
         value: Box<Span<Node>>,
     },
+    IndexedAssignStatement {
+        name: String,
+        index: Box<Span<Node>>,
+        value: Box<Span<Node>>,
+    },
     ProcStatement {
         name: String,
         args: Vec<String>,
@@ -118,10 +123,10 @@ impl<'p> Parser<'p> {
             Token::Proc => self.proc_statement()?,
             Token::Return => self.return_statement()?,
             Token::Use => self.use_statement()?,
-            Token::Ident(_) if self.tokens[self.index + 1].contents == Token::Equals => {
-                self.assign_statement()?
-            }
-            _ => self.expr(0)?,
+            //Token::Ident(_) if self.tokens[self.index + 1].contents == Token::Equals => {
+            //    self.assign_statement()?
+            //}
+            _ => self.assign_statement().or_else(|| self.expr(0))?,
         })
     }
 
@@ -230,7 +235,21 @@ impl<'p> Parser<'p> {
 
     fn assign_statement(&mut self) -> Option<Span<Node>> {
         let name = self.ensure_ident()?;
-        self.ensure_next(Token::Equals)?;
+        if self.try_next(Token::Equals).is_none() {
+            // indexed
+            self.ensure_next(Token::LBracket)?;
+            let index = self.expr(0)?;
+            self.ensure_next(Token::RBracket)?;
+            self.ensure_next(Token::Equals)?;
+            let value = self.expr(0)?;
+
+            return Some(spanned(Node::IndexedAssignStatement {
+                name,
+                index: Box::new(index),
+                value: Box::new(value),
+            }, 0, 0));
+        }
+
         let value = self.expr(0)?;
 
         Some(spanned(Node::AssignStatement {

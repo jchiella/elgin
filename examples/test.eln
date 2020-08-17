@@ -1,4 +1,5 @@
 proc main(): i32 {
     var x: [10]i32
+    x[3] = 10
     return x[3]
 }

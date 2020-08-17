@@ -120,6 +120,7 @@ impl<'g> Generator<'g> {
             Push(s) => self.push(s, typ),
             Load(s) => self.load(s, typ),
             Store(s) => self.store(s, typ),
+            StoreIndexed(s) => self.store_indexed(s, typ),
             Allocate(s) => self.allocate(s, typ),
 
             Index => self.index(typ),
@@ -198,6 +199,17 @@ impl<'g> Generator<'g> {
                 self.stack.pop().unwrap(),
                 *var,
             );
+        }
+    }
+
+    fn store_indexed(&mut self, s: String, _typ: Type) {
+        unsafe {
+            let value = self.stack.pop().unwrap();
+            let index = self.stack.pop().unwrap();
+            let zero = LLVMConstInt(LLVMInt32TypeInContext(self.context), 0, 0);
+            let mut indices = vec![zero, index];
+            let gep = LLVMBuildGEP(self.builder, self.lookup[&s], indices.as_mut_ptr(), indices.len() as u32, self.cstr("tmpgep"));
+            LLVMBuildStore(self.builder, value, gep);
         }
     }
 

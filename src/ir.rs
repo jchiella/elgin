@@ -45,6 +45,7 @@ pub enum InstructionType {
     Push(String),     // pushes an immediate value to the stack
     Load(String),     // pushes a variable's contents to the stack
     Store(String),    // pops a value from the stack into a variable
+    StoreIndexed(String), // pops an index then a value and stores to that index of the variable
     Allocate(String), // creates a new local variable and gives it the top value of the stack
 
     Index,            // pops an index and then an object and indexes in
@@ -237,6 +238,11 @@ impl<'i> IRBuilder<'i> {
                 name,
                 value,
             } => self.assign_statement(name, value, node.pos, node.len)?,
+            IndexedAssignStatement {
+                name,
+                index,
+                value,
+            } => self.indexed_assign_statement(name, index, value, node.pos, node.len)?,
             ReturnStatement {
                 val,
             } => self.return_statement(val, node.pos, node.len)?,
@@ -512,6 +518,23 @@ impl<'i> IRBuilder<'i> {
         let mut res = self.node(&value)?;
         res.push(spanned(Instruction {
             ins: InstructionType::Store(name.clone()),
+            typ: self.locate_var(&name)?,
+        }, pos, len));
+        Some(res)
+    }
+
+    fn indexed_assign_statement(
+        &mut self,
+        name: String,
+        index: Box<Span<Node>>,
+        value: Box<Span<Node>>,
+        pos: usize,
+        len: usize,
+    ) -> IRResult {
+        let mut res = self.node(&index)?;
+        res.append(&mut self.node(&value)?);
+        res.push(spanned(Instruction {
+            ins: InstructionType::StoreIndexed(name.clone()),
             typ: self.locate_var(&name)?,
         }, pos, len));
         Some(res)

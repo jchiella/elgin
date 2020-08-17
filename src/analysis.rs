@@ -47,6 +47,13 @@ impl<'i> IRBuilder<'i> {
                     self.add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
                     self.add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
                 }
+                StoreIndexed(_var) => {
+                    let _typ = stack.pop().unwrap();
+                    let _index = stack.pop().unwrap();
+                    // TODO what happens here?
+                    //self.add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
+                    //self.add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
+                }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
                     let var_type = ins.contents.typ.clone();
@@ -54,7 +61,6 @@ impl<'i> IRBuilder<'i> {
                     self.scopes[scope_index].insert(var, var_type.clone());
                     self.add_constraint(&mut constraints, var_type, content_type);
                 }
-
                 Index => {
                     let _index_type = stack.pop().unwrap();
                     let object_type = stack.pop().unwrap();
