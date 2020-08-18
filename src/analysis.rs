@@ -47,12 +47,13 @@ impl<'i> IRBuilder<'i> {
                     self.add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
                     self.add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
                 }
-                StoreIndexed(_var) => {
-                    let _typ = stack.pop().unwrap();
-                    let _index = stack.pop().unwrap();
+                StoreIndexed(var) => {
+                    let _index_type = stack.pop().unwrap();
+                    let value_type = stack.pop().unwrap();
+                    if let Type::Array(_, t) = self.locate_var(&var)? {
+                        self.add_constraint(&mut constraints, *t, value_type);
+                    }
                     // TODO what happens here?
-                    //self.add_constraint(&mut constraints, ins.contents.typ.clone(), typ);
-                    //self.add_constraint(&mut constraints, ins.contents.typ.clone(), self.locate_var(&var)?);
                 }
                 Allocate(var) => {
                     let content_type = stack.pop().unwrap();
@@ -83,14 +84,14 @@ impl<'i> IRBuilder<'i> {
 
                 Call(proc_name) => {
                     let proc = self.locate_proc(&proc_name)?.clone();
-                    let arg_count = proc.arg_types.len();
-                    for t in &proc.arg_types {
-                        self.add_constraint(
-                            &mut constraints,
-                            stack.remove(stack.len() - arg_count),
-                            t.clone(),
-                        );
+                    //let arg_count = proc.arg_types.len();
+                    {
+                        let args = &stack[stack.len() - proc.args.len()..];
+                        for (i, arg) in args.iter().enumerate() {
+                            self.add_constraint(&mut constraints, arg.clone(), proc.arg_types[i].clone());
+                        }
                     }
+                    stack.truncate(stack.len() - proc.args.len());
                     stack.push(proc.ret_type.clone());
                 }
                 Return => {
@@ -229,7 +230,6 @@ fn substitute_constraints(constraints: &Constraints, t1: &Type, t2: &Type) -> Co
 fn add_literal_constaints(constraints: &mut Constraints, procs: &mut Vec<IRProc>) {
     let mut has_int_literal = false;
     let mut has_float_literal = false;
-    let mut has_str_literal = false;
     for proc in procs {
         for ins in &proc.body {
             if ins.contents.typ == Type::IntLiteral {
@@ -237,9 +237,6 @@ fn add_literal_constaints(constraints: &mut Constraints, procs: &mut Vec<IRProc>
 
             } else if ins.contents.typ == Type::FloatLiteral {
                 has_float_literal = true;
-
-            } else if ins.contents.typ == Type::StrLiteral {
-                has_str_literal = true;
             }
         }
     }
@@ -250,7 +247,4 @@ fn add_literal_constaints(constraints: &mut Constraints, procs: &mut Vec<IRProc>
     if has_float_literal {
         constraints.push((Type::FloatLiteral, Type::F64));
     }
-    //if has_str_literal {
-    //    constraints.push((Type::StrLiteral, Type::Ptr(Box::new(Type::I8))));
-    //}
 }

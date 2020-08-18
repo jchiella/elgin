@@ -33,6 +33,8 @@ pub enum Token {
     Const,
     Return,
     Use,
+    Break,
+    Continue,
 
     // special characters
     LParen,
@@ -311,6 +313,8 @@ fn str_to_keyword(s: &str) -> Option<Token> {
         "const" => Token::Const,
         "return" => Token::Return,
         "use" => Token::Use,
+        "break" => Token::Break,
+        "continue" => Token::Continue,
         _ => return None,
     })
 }
@@ -341,6 +345,8 @@ fn token_len(t: &Token) -> usize {
         Token::Const => 5,
         Token::Return => 6,
         Token::Use => 3,
+        Token::Break => 5,
+        Token::Continue => 8,
 
         Token::LParen
         | Token::RParen

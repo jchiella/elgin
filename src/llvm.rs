@@ -172,6 +172,14 @@ impl<'g> Generator<'g> {
                 Type::StrLiteral => {
                     LLVMBuildGlobalStringPtr(self.builder, self.cstr(&s), self.cstr("tmpstr"))
                 }
+                Type::Bool => {
+                    let boolean = match s.as_str() {
+                        "true" => 1,
+                        "false" => 0,
+                        _ => unreachable!(),
+                    };
+                    LLVMConstInt(LLVMInt1TypeInContext(self.context), boolean, 0)
+                }
                 t => todo!("{:?}", t),
             };
             self.stack.push(obj);
@@ -246,10 +254,11 @@ impl<'g> Generator<'g> {
             let mut args = vec![];
             let arg_count = LLVMCountParams(proc);
             for _ in 0..arg_count {
-                args.push(self.stack.pop().unwrap());
+                args.insert(0, self.stack.pop().unwrap());
             }
             let call = LLVMBuildCall(self.builder, proc, args.as_mut_ptr(), args.len() as u32, self.cstr("tmpcall"));
-            self.stack.push(call); 
+            // FIXME calls to functions that return void need to not be named HOW TO DO THIS?
+            self.stack.push(call);
         }
     }
 

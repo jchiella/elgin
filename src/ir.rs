@@ -19,6 +19,9 @@ pub struct IRBuilder<'i> {
     pub scopes: Vec<Scope>,
     pub procs: Vec<IRProc>, 
     pub consts: HashMap<String, Span<Node>>,
+
+    current_loop_entrance_id: usize,
+    current_after_loop_id: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -45,10 +48,10 @@ pub enum InstructionType {
     Push(String),     // pushes an immediate value to the stack
     Load(String),     // pushes a variable's contents to the stack
     Store(String),    // pops a value from the stack into a variable
-    StoreIndexed(String), // pops an index then a value and stores to that index of the variable
+    StoreIndexed(String), // pops an index and a value and stores to that index of the variable
     Allocate(String), // creates a new local variable and gives it the top value of the stack
 
-    Index,            // pops an index and then an object and indexes in
+    Index,            // pops an index and an object and indexes in
 
     Branch(usize, usize), // conditional branch with if body and else body
     Jump(usize),          // unconditional jump
@@ -98,6 +101,9 @@ impl<'i> IRBuilder<'i> {
             scopes: vec![],
             procs: vec![],
             consts: HashMap::new(),
+
+            current_loop_entrance_id: 0,
+            current_after_loop_id: 0,
         }
     }
 
@@ -246,6 +252,12 @@ impl<'i> IRBuilder<'i> {
             ReturnStatement {
                 val,
             } => self.return_statement(val, node.pos, node.len)?,
+            BreakStatement {
+
+            } => self.break_statement(node.pos, node.len)?,
+            ContinueStatement {
+
+            } => self.continue_statement(node.pos, node.len)?,
             _ => unreachable!(),
         })
     }
@@ -442,8 +454,10 @@ impl<'i> IRBuilder<'i> {
     ) -> IRResult {
         let mut res = vec![];
         let cond_label = self.next_label_id();
+        self.current_loop_entrance_id = cond_label;
         let body_label = self.next_label_id();
         let end_label = self.next_label_id();
+        self.current_after_loop_id = end_label;
         let mut blocks_ending_in_return = 1;
 
         res.push(spanned(Instruction {
@@ -531,8 +545,8 @@ impl<'i> IRBuilder<'i> {
         pos: usize,
         len: usize,
     ) -> IRResult {
-        let mut res = self.node(&index)?;
-        res.append(&mut self.node(&value)?);
+        let mut res = self.node(&value)?;
+        res.append(&mut self.node(&index)?);
         res.push(spanned(Instruction {
             ins: InstructionType::StoreIndexed(name.clone()),
             typ: self.locate_var(&name)?,
@@ -554,6 +568,24 @@ impl<'i> IRBuilder<'i> {
             }, pos, len)
         );
         Some(res)
+    }
+
+    fn break_statement(&mut self, pos: usize, len: usize) -> IRResult {
+        Some(vec![
+            spanned(Instruction {
+                ins: InstructionType::Jump(self.current_after_loop_id),
+                typ: Type::NoReturn,
+            }, pos, len)
+        ])
+    }
+
+    fn continue_statement(&mut self, pos: usize, len: usize) -> IRResult {
+        Some(vec![
+            spanned(Instruction {
+                ins: InstructionType::Jump(self.current_loop_entrance_id),
+                typ: Type::NoReturn,
+            }, pos, len)
+        ])
     }
 
     fn const_statement(

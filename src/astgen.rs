@@ -79,6 +79,8 @@ pub enum Node {
     UseStatement {
         path: String,
     },
+    BreakStatement,
+    ContinueStatement,
 }
 
 fn spanned(node: Node, pos: usize, len: usize) -> Span<Node> {
@@ -123,10 +125,18 @@ impl<'p> Parser<'p> {
             Token::Proc => self.proc_statement()?,
             Token::Return => self.return_statement()?,
             Token::Use => self.use_statement()?,
-            //Token::Ident(_) if self.tokens[self.index + 1].contents == Token::Equals => {
-            //    self.assign_statement()?
-            //}
-            _ => self.assign_statement().or_else(|| self.expr(0))?,
+            Token::Break => self.break_statement()?,
+            Token::Continue => self.continue_statement()?,
+            _ => {
+                let saved_index = self.index;
+                if let Some(stat) = self.assign_statement() {
+                    stat
+                } else {
+                    self.index = saved_index;
+                    crate::errors::ERRORS.lock().unwrap().pop().unwrap();
+                    self.expr(0)?
+                }
+            }
         })
     }
 
@@ -320,10 +330,19 @@ impl<'p> Parser<'p> {
 
     fn return_statement(&mut self) -> Option<Span<Node>> {
         self.ensure_next(Token::Return)?;
-        let val = self.expr(0)?;
-        Some(spanned(Node::ReturnStatement {
-            val: Box::new(val),
-        }, 0, 0))
+        if self.try_next(Token::Newline).is_some() {
+            Some(spanned(Node::ReturnStatement {
+                val: Box::new(spanned(Node::Literal {
+                    typ: Type::Undefined,
+                    value: "undefined".to_owned(),
+                }, 0, 0)),
+            }, 0, 0))
+        } else {
+            let val = self.expr(0)?;
+            Some(spanned(Node::ReturnStatement {
+                val: Box::new(val),
+            }, 0, 0))
+        }
     }
 
     fn use_statement(&mut self) -> Option<Span<Node>> {
@@ -345,6 +364,16 @@ impl<'p> Parser<'p> {
         Some(spanned(Node::UseStatement {
             path,
         }, 0, 0))
+    }
+
+    fn break_statement(&mut self) -> Option<Span<Node>> {
+        self.ensure_next(Token::Break)?;
+        Some(spanned(Node::BreakStatement, 0, 0))
+    }
+
+    fn continue_statement(&mut self) -> Option<Span<Node>> {
+        self.ensure_next(Token::Continue)?;
+        Some(spanned(Node::ContinueStatement, 0, 0))
     }
 
     fn expr(&mut self, min_bp: u8) -> Option<Span<Node>> {
@@ -508,7 +537,7 @@ fn infix_binding_power(op: &String) -> Option<(u8, u8)> {
     Some(match op.as_str() {
         ">" | "<" | ">=" | "<=" | "==" | "!=" => (3, 4),
         "+" | "-" => (5, 6),
-        "*" | "/" => (7, 8),
+        "*" | "/" | "//" => (7, 8),
         _ => return None,
     })
 }
